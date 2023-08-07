@@ -28,41 +28,35 @@ folium.Map.add_ee_layer = add_ee_layer
 
 st.title('Earth Engine Streamlit App')
 
-
+def upload_files_proc(upload_files):
+    geometry_aoi_list = []
+    for upload_file in upload_files:
+        bytes_data = upload_file.read()
+        # Parse GeoJSON data
+        geojson_data = json.loads(bytes_data)
+        # Extract the coordinates from the GeoJSON data
+        coordinates = geojson_data['features'][0]['geometry']['coordinates']
+        # Creating gee geometry object based on coordinates
+        geometry = ee.Geometry.Polygon(coordinates)
+        # Adding geometry to the list
+        geometry_aoi_list.append(geometry)
+    # Combine multiple geometries from same/different files
+    if geometry_aoi_list:
+        geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
+    else:
+        # Set default geometry if no file uploaded
+        geometry_aoi = ee.Geometry.Point([27.98, 36.13])
+    return geometry_aoi
 
 # Main function to run the Streamlit app
 def main():
     #### User input
-    ## File uplaod
-    # User uploads GeoJSON file
-    uploaded_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
+    ## File upload
+    # User input GeoJSON file
+    upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
+    # calling upload files function
+    geometry_aoi = upload_files_proc(upload_files)
 
-    # List to store the geometry objects for all uploaded files
-    geometry_aoi_list = []
-
-    # Process uploaded GeoJSON file
-    for uploaded_file in uploaded_files:
-        bytes_data = uploaded_file.read()
-        # st.write("filename:", uploaded_file.name)
-
-        # Parse GeoJSON data
-        geojson_data = json.loads(bytes_data)
-
-        # Extract the coordinates from the GeoJSON data
-        coordinates = geojson_data['features'][0]['geometry']['coordinates']
-
-        # Create an Earth Engine Geometry object from the coordinates
-        geometry = ee.Geometry.Polygon(coordinates)
-
-        # Add the geometry to the list
-        geometry_aoi_list.append(geometry)
-
-    # Multiple geometries can be combined
-    if geometry_aoi_list:
-        aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
-    else:
-        # Set a default geometry if no file was uploaded
-        aoi = ee.Geometry.Point([2.80, 36.40])
     #### Map section
     # Setting up main map
     m = folium.Map(location=[36.40, 2.80], tiles='Open Street Map', zoom_start=10, control_scale=True)
@@ -89,7 +83,7 @@ def main():
     tci_image = ee.Image('COPERNICUS/S2/20230713T102649_20230713T103541_T31SDA')
     
     # Clipping the image to the area of interest "aoi"
-    tci_image_clipped = tci_image.clip(aoi).divide(10000)
+    tci_image_clipped = tci_image.clip(geometry_aoi).divide(10000)
     
     # TCI image visual parameters
     tci_params = {
