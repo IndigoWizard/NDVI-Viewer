@@ -3,6 +3,7 @@ import ee
 import folium
 from folium import WmsTileLayer
 from streamlit_folium import folium_static
+from datetime import datetime, timedelta
 import json
 
 # Initializing the Earth Engine library
@@ -60,10 +61,15 @@ def main():
 
     ## Time range inpui
     # time input goes here
-
+    # Get user input for the date range using st.date_input
+    col1, col2 = st.columns(2)
+    start_date = col1.date_input("Start Date", datetime(2023, 7, 20))
+    end_date = col2.date_input("End Date", datetime(2023, 7, 30))
 
     # requires to be converted later to gee filter format before passing it in
 
+    start_date = start_date.strftime('%Y-%m-%d')
+    end_date = end_date.strftime('%Y-%m-%d')
 
 
     #### Map section
@@ -91,7 +97,7 @@ def main():
     # Image collection
     collection = ee.ImageCollection('COPERNICUS/S2_SR') \
     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
-    .filterDate('2023-07-13', '2023-07-14') \
+    .filterDate(start_date, end_date) \
     .filterBounds(geometry_aoi)
 
     # clipping the main collection to the aoi geometry
@@ -113,12 +119,29 @@ def main():
     }
 
     ## Other imagery processing operations go here 
+    # NDVI
+    def getNDVI(collection):
+        return collection.normalizedDifference(['B8', 'B4'])
+
+    # clipping to AOI
+    ndvi = getNDVI(sat_imagery)
+
+    # NDVI visual parameters:
+    ndvi_params = {
+    'min': 0,
+    'max': 1,
+    'palette': ['#ffffe5', '#f7fcb9', '#78c679', '#41ab5d', '#238443', '#005a32'],
+    'opacity': 0.8
+    }
 
 
 
     #### Layers section
     # add TCI layer to map
     m.add_ee_layer(tci_image, tci_params, 'S2 TCI - July 2023')
+    # NDVI
+    m.add_ee_layer(ndvi, ndvi_params, 'NDVI')
+
 
     #### Map result display
     # Folium Map Layer Control: we can see and interact with map layers
