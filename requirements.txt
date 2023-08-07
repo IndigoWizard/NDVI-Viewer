@@ -1,6 +1,4 @@
-ee
+earthengine-api
 folium
-WmsTileLayer
-webbrowser
-Streamlit
-```
+streamlit-folium
+streamlit
