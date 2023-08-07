@@ -1,0 +1,4 @@
+earthengine-api
+folium
+streamlit-folium
+streamlit
