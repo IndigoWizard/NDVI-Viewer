@@ -24,11 +24,45 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
 
-aoi = ee.Geometry.Point([2.80, 36.40]).buffer(20000)
+#aoi = ee.Geometry.Point([2.80, 36.40]).buffer(20000)
+
+st.title('Earth Engine Streamlit App')
+
+
 
 # Main function to run the Streamlit app
 def main():
-    st.title('Earth Engine Streamlit App')
+    #### User input
+    ## File uplaod
+    # User uploads GeoJSON file
+    uploaded_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
+
+    # List to store the geometry objects for all uploaded files
+    geometry_aoi_list = []
+
+    # Process uploaded GeoJSON file
+    for uploaded_file in uploaded_files:
+        bytes_data = uploaded_file.read()
+        # st.write("filename:", uploaded_file.name)
+
+        # Parse GeoJSON data
+        geojson_data = json.loads(bytes_data)
+
+        # Extract the coordinates from the GeoJSON data
+        coordinates = geojson_data['features'][0]['geometry']['coordinates']
+
+        # Create an Earth Engine Geometry object from the coordinates
+        geometry = ee.Geometry.Polygon(coordinates)
+
+        # Add the geometry to the list
+        geometry_aoi_list.append(geometry)
+
+    # Multiple geometries can be combined
+    if geometry_aoi_list:
+        aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
+    else:
+        # Set a default geometry if no file was uploaded
+        aoi = ee.Geometry.Point([2.80, 36.40])
     #### Map section
     # Setting up main map
     m = folium.Map(location=[36.40, 2.80], tiles='Open Street Map', zoom_start=10, control_scale=True)
