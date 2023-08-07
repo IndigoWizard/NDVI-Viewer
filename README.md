@@ -1,2 +1,3 @@
 # NDVI-Viewer
-Vew and compare NDVI values of an area of interest between two time periods.
+
+View and compare NDVI values of an area of interest between two time periods.
