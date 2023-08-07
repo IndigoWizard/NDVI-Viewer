@@ -51,11 +51,20 @@ def upload_files_proc(upload_files):
 # Main function to run the Streamlit app
 def main():
     #### User input
+
     ## File upload
     # User input GeoJSON file
     upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
     # calling upload files function
     geometry_aoi = upload_files_proc(upload_files)
+
+    ## Time range inpui
+    # time input goes here
+
+
+    # requires to be converted later to gee filter format before passing it in
+
+
 
     #### Map section
     # Setting up main map
@@ -79,23 +88,37 @@ def main():
     b2.add_to(m)
 
     #### Satellite imagery Processing Section
-    # Specific satellite image ID (july 2023 - North of Algeria)
-    tci_image = ee.Image('COPERNICUS/S2/20230713T102649_20230713T103541_T31SDA')
+    # Image collection
+    collection = ee.ImageCollection('COPERNICUS/S2_SR') \
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+    .filterDate('2023-07-13', '2023-07-14') \
+    .filterBounds(geometry_aoi)
+
+    # clipping the main collection to the aoi geometry
+    clipped_collection = collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
     
+    # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
+    sat_imagery = clipped_collection.median() 
+
+    ## TCI (True Color Imagery)
     # Clipping the image to the area of interest "aoi"
-    tci_image_clipped = tci_image.clip(geometry_aoi).divide(10000)
-    
+    tci_image = sat_imagery
+
     # TCI image visual parameters
     tci_params = {
-        'bands': ['B4', 'B3', 'B2'],
-        'min': 0.1,
-        'max': 0.5,
-        'gamma': 1
+      'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
+      'min': 0,
+      'max': 1,
+      'gamma': 1
     }
+
+    ## Other imagery processing operations go here 
+
+
 
     #### Layers section
     # add TCI layer to map
-    m.add_ee_layer(tci_image_clipped, tci_params, 'S2 TCI - July 2023')
+    m.add_ee_layer(tci_image, tci_params, 'S2 TCI - July 2023')
 
     #### Map result display
     # Folium Map Layer Control: we can see and interact with map layers
