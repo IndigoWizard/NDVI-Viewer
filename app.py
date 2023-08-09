@@ -67,8 +67,8 @@ def main():
     # time input goes here
     # Get user input for the date range using st.date_input
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Start Date", datetime(2023, 7, 20))
-    end_date = col2.date_input("End Date", datetime(2023, 7, 30))
+    start_date = col1.date_input("Start Date", datetime(2023, 2, 10))
+    end_date = col2.date_input("End Date", datetime(2023, 2, 20))
 
     # converting date input gee filter format before passing it in
     start_date = start_date.strftime('%Y-%m-%d')
@@ -137,12 +137,29 @@ def main():
     ndvi_params = {
     'min': 0,
     'max': 1,
-    'palette': ['#ffffe5', '#f7fcb9', '#78c679', '#41ab5d', '#238443', '#005a32'],
-    'opacity': 0.8
+    'palette': ['#ffffe5', '#f7fcb9', '#78c679', '#41ab5d', '#238443', '#005a32']
     }
 
     # Masking NDVI over the water & show only land
     ndvi = ndvi.updateMask(ndvi.gte(0))
+
+    # ##### NDVI classification: 7 classes
+    ndvi_classified = ee.Image(ndvi) \
+    .where(ndvi.gte(0).And(ndvi.lt(0.15)), 1) \
+    .where(ndvi.gte(0.15).And(ndvi.lt(0.25)), 2) \
+    .where(ndvi.gte(0.25).And(ndvi.lt(0.35)), 3) \
+    .where(ndvi.gte(0.35).And(ndvi.lt(0.45)), 4) \
+    .where(ndvi.gte(0.45).And(ndvi.lt(0.65)), 5) \
+    .where(ndvi.gte(0.65).And(ndvi.lt(0.75)), 6) \
+    .where(ndvi.gte(0.75), 7) \
+
+    # Classified NDVI visual parameters
+    ndvi_classified_params = {
+    'min': 1,
+    'max': 7,
+    'palette': ['#a50026', '#ed5e3d', '#f9f7ae', '#fec978', '#9ed569', '#229b51', '#006837']
+    # each color corresponds to an NDVI class.
+    }
 
     #### Satellite imagery Processing Section END
 
@@ -151,6 +168,8 @@ def main():
     m.add_ee_layer(tci_image, tci_params, 'True Color Image')
     # NDVI
     m.add_ee_layer(ndvi, ndvi_params, 'NDVI')
+    # Classified NDVI
+    m.add_ee_layer(ndvi_classified, ndvi_classified_params, 'NDVI - Classified')
 
     #### Layers section END
 
