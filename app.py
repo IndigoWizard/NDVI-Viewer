@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 import json
 
 # Initializing the Earth Engine library
+# Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
+#ee.Initialize()
+# geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
     geemap.ee_initialize(token_name=token_name)
