@@ -141,12 +141,14 @@ def main():
     'opacity': 0.8
     }
 
+    # Masking NDVI over the water & show only land
+    ndvi = ndvi.updateMask(ndvi.gte(0))
 
     #### Satellite imagery Processing Section END
 
     #### Layers section START
     # add TCI layer to map
-    m.add_ee_layer(tci_image, tci_params, 'S2 TCI - July 2023')
+    m.add_ee_layer(tci_image, tci_params, 'True Color Image')
     # NDVI
     m.add_ee_layer(ndvi, ndvi_params, 'NDVI')
 
