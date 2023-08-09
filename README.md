@@ -22,15 +22,7 @@ You can create area of interest shapefiles in GeoGSON format by going to [geojso
 
 This project was first developed as a submission to the Environemental Data Challenge of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://github.com/MLH). 
 
-
-<div style="display: flex; width: 100%;">
-    <div style="flex: 22%; margin-right:5px;">
-        <img src="https://cdn.discordapp.com/attachments/1134523742245097482/1137799138541580381/image.png" alt="ENVCHALLENGE" style="width:100%; height:auto;">
-    </div>
-    <div style="flex: 50%; margin-left:5px;">
-        <img src="https://user-images.githubusercontent.com/57787993/258729929-52b7e6da-aa73-4ebb-914d-ea22df58acd4.png" alt="GHWDATA" style="width:100%; height:auto;">
-    </div>
-</div>
+![](https://cdn.discordapp.com/attachments/727996037188550728/1138959099426517012/image.png)
 
 ### Credit
 
