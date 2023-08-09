@@ -1,5 +1,6 @@
 import streamlit as st
 import ee
+import geemap
 import folium
 from folium import WmsTileLayer
 from streamlit_folium import folium_static
@@ -7,7 +8,9 @@ from datetime import datetime, timedelta
 import json
 
 # Initializing the Earth Engine library
-ee.Initialize()
+@st.cache_data(persist=True)
+def ee_auth(token_name="EARTHENGINE_TOKEN"):
+    geemap.ee_initialize(token_name=token_name)
 
 # Earth Engine drawing method setup
 def add_ee_layer(self, ee_image_object, vis_params, name):
@@ -25,10 +28,10 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
 
-#aoi = ee.Geometry.Point([2.80, 36.40]).buffer(20000)
-
+# Main header title
 st.title('Earth Engine Streamlit App')
 
+# Uplaod function 
 def upload_files_proc(upload_files):
     geometry_aoi_list = []
     for upload_file in upload_files:
@@ -51,7 +54,7 @@ def upload_files_proc(upload_files):
 
 # Main function to run the Streamlit app
 def main():
-    #### User input
+    #### User input section START
 
     ## File upload
     # User input GeoJSON file
@@ -66,13 +69,14 @@ def main():
     start_date = col1.date_input("Start Date", datetime(2023, 7, 20))
     end_date = col2.date_input("End Date", datetime(2023, 7, 30))
 
-    # requires to be converted later to gee filter format before passing it in
-
+    # converting date input gee filter format before passing it in
     start_date = start_date.strftime('%Y-%m-%d')
     end_date = end_date.strftime('%Y-%m-%d')
 
 
-    #### Map section
+    #### User input section END
+
+    #### Map section START
     # Setting up main map
     m = folium.Map(location=[36.40, 2.80], tiles='Open Street Map', zoom_start=10, control_scale=True)
 
@@ -93,7 +97,9 @@ def main():
     )
     b2.add_to(m)
 
-    #### Satellite imagery Processing Section
+    #### Map section END
+
+    #### Satellite imagery Processing Section START
     # Image collection
     collection = ee.ImageCollection('COPERNICUS/S2_SR') \
     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
@@ -135,13 +141,15 @@ def main():
     }
 
 
+    #### Satellite imagery Processing Section END
 
-    #### Layers section
+    #### Layers section START
     # add TCI layer to map
     m.add_ee_layer(tci_image, tci_params, 'S2 TCI - July 2023')
     # NDVI
     m.add_ee_layer(ndvi, ndvi_params, 'NDVI')
 
+    #### Layers section END
 
     #### Map result display
     # Folium Map Layer Control: we can see and interact with map layers
