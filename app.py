@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 import json
 
 # Initializing the Earth Engine library
-@st.cache_data(persist=True)
-def ee_auth(token_name="EARTHENGINE_TOKEN"):
+@st.cache(persist=True)
+def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
     geemap.ee_initialize(token_name=token_name)
 
 # Earth Engine drawing method setup
@@ -54,6 +54,7 @@ def upload_files_proc(upload_files):
 
 # Main function to run the Streamlit app
 def main():
+    ee_authenticate(token_name="EARTHENGINE_TOKEN")
     #### User input section START
 
     ## File upload
