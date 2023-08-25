@@ -2,6 +2,7 @@ import streamlit as st
 import ee
 import geemap
 import folium
+import folium.plugins
 from folium import WmsTileLayer
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
@@ -30,6 +31,7 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
+folium.plugins.DualMap.add_ee_layer = add_ee_layer
 
 # Uplaod function 
 def upload_files_proc(upload_files):
@@ -101,7 +103,7 @@ def main():
 
     #### Map section START
     # Setting up main map
-    m = folium.Map(location=[36.45, 2.85], tiles='Open Street Map', zoom_start=9, control_scale=True)
+    m = folium.plugins.DualMap(location=[36.45, 2.85], tiles='Open Street Map', zoom_start=9, control_scale=True)
 
     ### BASEMAPS START
     ## Primary basemaps
@@ -111,14 +113,14 @@ def main():
 
     ## WMS tiles basemaps
     # OSM CyclOSM basemap 
-    b2 = WmsTileLayer(
-        url=('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'),
-        layers=None,
-        name='Topography Basemap', # layer name to display on layer panel
-        attr='Topography Map',
-        show=False
-    )
-    b2.add_to(m)
+    # b2 = WmsTileLayer(
+    #     url=('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'),
+    #     layers=None,
+    #     name='Topography Basemap', # layer name to display on layer panel
+    #     attr='Topography Map',
+    #     show=False
+    # )
+    # b2.add_to(m)
     ### BASEMAPS END
     #### Map section END
 
@@ -208,17 +210,17 @@ def main():
 
     #### Layers section START
     # basemap layers
-    m.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
-    m.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
+    m.m1.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
+    m.m2.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
 
     # NDVI
-    m.add_ee_layer(old_ndvi, ndvi_params, 'Old Raw NDVI')
-    m.add_ee_layer(new_ndvi, ndvi_params, 'New Raw NDVI')
+    m.m1.add_ee_layer(old_ndvi, ndvi_params, 'Old Raw NDVI')
+    m.m2.add_ee_layer(new_ndvi, ndvi_params, 'New Raw NDVI')
 
     # Add layers to the second map (m.m2)
     # Classified NDVI
-    m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
-    m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
+    m.m1.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
+    m.m2.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
 
     #### Layers section END
 
@@ -229,6 +231,15 @@ def main():
     # Display the map
     folium_static(m)
 
+    st.markdown(
+    """
+    <style>
+        iframe {
+            width: 100%;
+        }
+
+    </style>
+    """, unsafe_allow_html=True)
 # Run the app
 if __name__ == "__main__":
     main()
