@@ -31,9 +31,6 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
 
-# Main header title
-st.title('Earth Engine Streamlit App')
-
 # Uplaod function 
 def upload_files_proc(upload_files):
     geometry_aoi_list = []
@@ -57,34 +54,56 @@ def upload_files_proc(upload_files):
 
 # Main function to run the Streamlit app
 def main():
+    # initiate gee 
     ee_authenticate(token_name="EARTHENGINE_TOKEN")
-    #### User input section START
 
+    st.title('NDVI Viewer Streamlit App')
+
+    #### User input section START
+    st.write("Choose a GeoJSON file for your Area Of Interest:")
     ## File upload
     # User input GeoJSON file
-    upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
+    upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True, label_visibility ="collapsed")
     # calling upload files function
     geometry_aoi = upload_files_proc(upload_files)
 
     ## Time range inpui
     # time input goes here
-    # Get user input for the date range using st.date_input
+    
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Start Date", datetime(2023, 2, 10))
-    end_date = col2.date_input("End Date", datetime(2023, 2, 20))
 
-    # converting date input gee filter format before passing it in
-    start_date = start_date.strftime('%Y-%m-%d')
-    end_date = end_date.strftime('%Y-%m-%d')
+    col1.info("Old NDVI Date 📅")
+    old_date = col1.date_input("old", datetime(2023, 3, 20), label_visibility="collapsed")
 
+    col2.success("New NDVI Date 📅")
+    new_date = col2.date_input("new", datetime(2023, 7, 17), label_visibility="collapsed")
+
+    # Calculating time frame
+    # time stretch
+    days_before = 7
+    # old time range
+    old_start_date = old_date - timedelta(days=days_before)
+    old_end_date = old_date
+
+    # new time range
+    new_start_date = new_date - timedelta(days=days_before)
+    new_end_date = new_date
+
+    # converting date input to gee filter format before passing it in
+    # old
+    str_old_start_date = old_start_date.strftime('%Y-%m-%d')
+    str_old_end_date = old_end_date.strftime('%Y-%m-%d')
+    # new
+    str_new_start_date = new_start_date.strftime('%Y-%m-%d')
+    str_new_end_date = new_end_date.strftime('%Y-%m-%d')
 
     #### User input section END
 
     #### Map section START
     # Setting up main map
-    m = folium.Map(location=[36.40, 2.80], tiles='Open Street Map', zoom_start=10, control_scale=True)
+    m = folium.Map(location=[36.45, 2.85], tiles='Open Street Map', zoom_start=9, control_scale=True)
 
-    ### BASEMAPS
+    ### BASEMAPS START
     ## Primary basemaps
     # CartoDB Dark Matter basemap
     b1 = folium.TileLayer('cartodbdark_matter', name='Dark Matter Basemap')
@@ -100,32 +119,41 @@ def main():
         show=False
     )
     b2.add_to(m)
-
+    ### BASEMAPS END
     #### Map section END
 
     #### Satellite imagery Processing Section START
-    # Image collection
-    collection = ee.ImageCollection('COPERNICUS/S2_SR') \
+    # Old Image collection
+    old_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
-    .filterDate(start_date, end_date) \
+    .filterDate(str_old_start_date, str_old_end_date) \
+    .filterBounds(geometry_aoi)
+
+    # New Image collection
+    new_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+    .filterDate(str_new_start_date, str_new_end_date) \
     .filterBounds(geometry_aoi)
 
     # clipping the main collection to the aoi geometry
-    clipped_collection = collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
+    old_clipped_collection = old_collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
+    new_clipped_collection = new_collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
     
     # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
-    sat_imagery = clipped_collection.median() 
+    old_sat_imagery = old_clipped_collection.median()
+    new_sat_imagery = new_clipped_collection.median()
 
     ## TCI (True Color Imagery)
     # Clipping the image to the area of interest "aoi"
-    tci_image = sat_imagery
+    old_tci_image = old_sat_imagery
+    new_tci_image = new_sat_imagery
 
     # TCI image visual parameters
     tci_params = {
-      'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
-      'min': 0,
-      'max': 1,
-      'gamma': 1
+    'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
+    'min': 0,
+    'max': 1,
+    'gamma': 1
     }
 
     ## Other imagery processing operations go here 
@@ -134,7 +162,8 @@ def main():
         return collection.normalizedDifference(['B8', 'B4'])
 
     # clipping to AOI
-    ndvi = getNDVI(sat_imagery)
+    old_ndvi = getNDVI(old_sat_imagery)
+    new_ndvi = getNDVI(new_sat_imagery)
 
     # NDVI visual parameters:
     ndvi_params = {
@@ -144,17 +173,28 @@ def main():
     }
 
     # Masking NDVI over the water & show only land
-    ndvi = ndvi.updateMask(ndvi.gte(0))
+    old_ndvi = old_ndvi.updateMask(old_ndvi.gte(0))
+    new_ndvi = new_ndvi.updateMask(new_ndvi.gte(0))
 
     # ##### NDVI classification: 7 classes
-    ndvi_classified = ee.Image(ndvi) \
-    .where(ndvi.gte(0).And(ndvi.lt(0.15)), 1) \
-    .where(ndvi.gte(0.15).And(ndvi.lt(0.25)), 2) \
-    .where(ndvi.gte(0.25).And(ndvi.lt(0.35)), 3) \
-    .where(ndvi.gte(0.35).And(ndvi.lt(0.45)), 4) \
-    .where(ndvi.gte(0.45).And(ndvi.lt(0.65)), 5) \
-    .where(ndvi.gte(0.65).And(ndvi.lt(0.75)), 6) \
-    .where(ndvi.gte(0.75), 7) \
+    old_ndvi_classified = ee.Image(old_ndvi) \
+    .where(old_ndvi.gte(0).And(old_ndvi.lt(0.15)), 1) \
+    .where(old_ndvi.gte(0.15).And(old_ndvi.lt(0.25)), 2) \
+    .where(old_ndvi.gte(0.25).And(old_ndvi.lt(0.35)), 3) \
+    .where(old_ndvi.gte(0.35).And(old_ndvi.lt(0.45)), 4) \
+    .where(old_ndvi.gte(0.45).And(old_ndvi.lt(0.65)), 5) \
+    .where(old_ndvi.gte(0.65).And(old_ndvi.lt(0.75)), 6) \
+    .where(old_ndvi.gte(0.75), 7) \
+    
+    # ##### NDVI classification: 7 classes
+    new_ndvi_classified = ee.Image(new_ndvi) \
+    .where(new_ndvi.gte(0).And(new_ndvi.lt(0.15)), 1) \
+    .where(new_ndvi.gte(0.15).And(new_ndvi.lt(0.25)), 2) \
+    .where(new_ndvi.gte(0.25).And(new_ndvi.lt(0.35)), 3) \
+    .where(new_ndvi.gte(0.35).And(new_ndvi.lt(0.45)), 4) \
+    .where(new_ndvi.gte(0.45).And(new_ndvi.lt(0.65)), 5) \
+    .where(new_ndvi.gte(0.65).And(new_ndvi.lt(0.75)), 6) \
+    .where(new_ndvi.gte(0.75), 7) \
 
     # Classified NDVI visual parameters
     ndvi_classified_params = {
@@ -167,12 +207,18 @@ def main():
     #### Satellite imagery Processing Section END
 
     #### Layers section START
-    # add TCI layer to map
-    m.add_ee_layer(tci_image, tci_params, 'True Color Image')
+    # basemap layers
+    m.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
+    m.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
+
     # NDVI
-    m.add_ee_layer(ndvi, ndvi_params, 'NDVI')
+    m.add_ee_layer(old_ndvi, ndvi_params, 'Old Raw NDVI')
+    m.add_ee_layer(new_ndvi, ndvi_params, 'New Raw NDVI')
+
+    # Add layers to the second map (m.m2)
     # Classified NDVI
-    m.add_ee_layer(ndvi_classified, ndvi_classified_params, 'NDVI - Classified')
+    m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
+    m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
 
     #### Layers section END
 
