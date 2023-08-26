@@ -59,7 +59,7 @@ def main():
 
     st.title('NDVI Viewer Streamlit App')
 
-    #### User input section START
+    #### User input section - START
     st.write("Choose a GeoJSON file for your Area Of Interest:")
     ## File upload
     # User input GeoJSON file
@@ -97,13 +97,13 @@ def main():
     str_new_start_date = new_start_date.strftime('%Y-%m-%d')
     str_new_end_date = new_end_date.strftime('%Y-%m-%d')
 
-    #### User input section END
+    #### User input section - END
 
-    #### Map section START
+    #### Map section - START
     # Setting up main map
     m = folium.Map(location=[36.45, 2.85], tiles='Open Street Map', zoom_start=9, control_scale=True)
 
-    ### BASEMAPS START
+    ### BASEMAPS - START
     ## Primary basemaps
     # CartoDB Dark Matter basemap
     b1 = folium.TileLayer('cartodbdark_matter', name='Dark Matter Basemap')
@@ -119,10 +119,10 @@ def main():
         show=False
     )
     b2.add_to(m)
-    ### BASEMAPS END
-    #### Map section END
+    ### BASEMAPS - END
+    #### Map section - END
 
-    #### Satellite imagery Processing Section START
+    #### Satellite imagery Processing Section - START
     # Old Image collection
     old_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
@@ -204,9 +204,9 @@ def main():
     # each color corresponds to an NDVI class.
     }
 
-    #### Satellite imagery Processing Section END
+    #### Satellite imagery Processing Section - END
 
-    #### Layers section START
+    #### Layers section - START
     # basemap layers
     m.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
     m.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
@@ -220,14 +220,76 @@ def main():
     m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
     m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
 
-    #### Layers section END
+    #### Layers section - END
 
-    #### Map result display
+    #### Map result display - START
     # Folium Map Layer Control: we can see and interact with map layers
     folium.LayerControl(collapsed=False).add_to(m)
     
     # Display the map
     folium_static(m)
+
+    #### Map result display - END
+
+    #### Legend - START
+    st.write("### Map Legend:")
+
+    # Define classified NDVI color palette hex codes
+    classified_ndvi_palette = ['#a50026', '#ed5e3d', '#f9f7ae', '#fec978', '#9ed569', '#229b51', '#006837']
+
+    # Create an HTML legend for NDVI classes
+    classified_ndvi_legend_html = """
+        <div style="border-radius: 5px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);">
+            <h5>Reclassified NDVI</h5>
+            <ul style="list-style-type: none; padding: 0;">
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {0};">&#9632;</span> [-1 ; 0.15] Absent Vegetation. (Water/Built-up/Rocky/Sandy Surfaces..)</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {1};">&#9632;</span> [0.15 ; 0.25] Bare Soil.</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {2};">&#9632;</span> [0.25 ; 0.35] Low Vegetation.</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {3};">&#9632;</span> [0.35 ; 0.45] Light Vegetation.</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {4};">&#9632;</span> [0.45 ; 0.65] Moderate Vegetation.</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {5};">&#9632;</span> [0.65 ; 0.75] Strong Vegetation.</li>
+                <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {6};">&#9632;</span> [> 0.75 ] Dense Vegetation.</li>
+            </ul>
+        </div>
+    """.format(*classified_ndvi_palette)
+
+    # Display the Reclassified NDVI legend using st.markdown
+    st.markdown(classified_ndvi_legend_html, unsafe_allow_html=True)
+    #### Legend - END
+
+    #### Miscs Infos - START
+    st.write("### Information")
+
+    st.write("The **[Normalized Difference Vegetation Index (NDVI)](https://eos.com/make-an-analysis/ndvi/)** is a widely used indicator of vegetation health and density. It quantifies the presence of green vegetation by measuring the difference between near-infrared (NIR) and red (R) reflectance of the Earth's surface. NDVI values range from -1 to 1, where higher values typically indicate denser and healthier vegetation.")
+
+    st.write("NDVI is calculated using the formula:")
+    st.latex(r'''
+    \text{NDVI} = \frac{\text{NIR} - \text{R}}{\text{NIR} + \text{R}}
+    ''')
+
+    st.write("In this application, we utilize **Sentinel-2 Level-2A atmospherically corrected Surface Reflectance images**. These images are acquired by the [Sentinel-2 satellite constellation](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/applications), which consists of twin satellites (Sentinel-2A and Sentinel-2B) that capture high-resolution multispectral imagery of the Earth's surface.")
+
+    st.write("The [Level-2A](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/product-types/level-2a) products have undergone atmospheric correction, which removes the effects of the atmosphere on the captured radiance. This correction enhances the accuracy of the surface reflectance values, making them suitable for various land cover and vegetation analysis, including NDVI calculations.")
+
+    # Note on Image Interpretation
+    st.write("### Note on Image Interpretation")
+
+    st.write("The NDVI map displayed above provides insights into the vegetation distribution. However, please be aware of the following factors that can affect the map's appearance into displaying data:")
+
+    st.write("1. **Clouds and Atmospheric Effects:** Clouds and atmospheric conditions can impact NDVI calculations, leading to unexpected color variations in the map.")
+    st.write("2. **Water Bodies:** Some water bodies might exhibit higher NDVI values due to their reflectance properties, leading to color patterns that differ from expected vegetation patterns.")
+    st.write("3. **Sensor Limitations:** Satellite sensors have limitations in distinguishing between surface types, leading to variations in NDVI values and colors.")
+    st.write("4. **Seasonal Changes:** NDVI values can vary based on seasonal changes, vegetation growth stages, and natural fluctuations in land cover.")
+    st.write("5. **Data Processing:** The displayed NDVI values result from complex data processing and analysis techniques, providing visual aids rather than precise representations.")
+
+    st.write("As you explore the NDVI map, understanding these influences will help you interpret the results more effectively and make informed decisions based on the insights gained.")
+
+    st.write("Please use this information as a guide to understanding the potential variations in the NDVI map and the factors that contribute to its visual representation.")
+
+    #### Miscs Info - END
+
+
+ 
 
 # Run the app
 if __name__ == "__main__":
