@@ -420,10 +420,8 @@ def main():
         }
 
         /*Sidebarl*/
-        section[data-testid="stSidebar"] {
-            width: 260px !important;
-            min-width: 200px;
-            max-width: 280px;
+        .css-1cypcdb{
+            max-width: 260px;
         }
         /*Sidebar : inside container*/
         .css-ge7e53 {
