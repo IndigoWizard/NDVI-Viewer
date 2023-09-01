@@ -85,9 +85,9 @@ def main():
                 - [About](#about)
                 - [Contribution](#contribute-to-the-app)
                 - [Credit](#credit)
-            """, unsafe_allow_html=True)
+            """)
         st.subheader("Contact:")
-        st.info("[![LinkedIn](https://static.licdn.com/sc/h/8s162nmbcnfkg7a0k8nq9wwqo)](https://linkedin.com/in/ahmed-islem-mokhtari) [![GitHub](https://github.githubassets.com/favicons/favicon-dark.png)](https://github.com/IndigoWizard) [![Medium](https://miro.medium.com/1*m-R_BkNf1Qjr1YbyOIJY2w.png)](https://medium.com/@Indigo.Wizard/mt-chenoua-forest-fires-analysis-with-remote-sensing-614681f468e9)")
+        st.markdown("[![LinkedIn](https://static.licdn.com/sc/h/8s162nmbcnfkg7a0k8nq9wwqo)](https://linkedin.com/in/ahmed-islem-mokhtari) [![GitHub](https://github.githubassets.com/favicons/favicon-dark.png)](https://github.com/IndigoWizard) [![Medium](https://miro.medium.com/1*m-R_BkNf1Qjr1YbyOIJY2w.png)](https://medium.com/@Indigo.Wizard/mt-chenoua-forest-fires-analysis-with-remote-sensing-614681f468e9)")
 
         st.caption("ʕ •ᴥ•ʔ Star⭐the [project on GitHub](https://github.com/IndigoWizard/NDVI-Viewer/)!")
 
@@ -397,9 +397,13 @@ def main():
             padding-block: 1rem;
         }
         .css-1544g2n {
-            padding: 1rem;
+            padding: 0 1rem;
         }
-
+        /*Sidebarl*/
+        .css-1cypcdb {
+            min-width: 260px;
+            max-width: 280px;
+        }
         /*Sidebar : inside container*/
         .css-ge7e53 {
             width: fit-content;
@@ -411,12 +415,12 @@ def main():
         }
 
         /*Sidebar : Navigation list*/
-        .css-nahz7x.e1nzilvr4 ul {
+        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) {
             margin: 0;
             padding: 0;
             list-style: none;
         }
-        .css-nahz7x li {
+        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li {
             padding: 0;
             margin: 0;
             padding: 0;
@@ -424,17 +428,10 @@ def main():
         }
 
         /* Sidebar: socials*/
-        div.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al.st-am.st-bi.st-an.st-ao.st-ap.st-aq.st-ar.st-as.st-at.st-au.st-av.st-aw.st-ax.st-ay.st-bb.st-b0.st-b1.st-b2.st-b3.st-b4.st-b5.st-b6.st-b7 {
-            width: fit-content;
-            margin-top: 1rem;
-        }
-        .css-1j6rxz7 {
-            justify-content: space-evenly;
-        }
-        .css-17z2rne.e1e4pi9i0 p {
+        div.css-12kbvog:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p:nth-child(1) {
             display: flex;
             flex-direction: row;
-            gap: 2rem;
+            gap: 1rem;
         }
 
         /*Map iframe*/
