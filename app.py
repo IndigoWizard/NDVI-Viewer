@@ -79,6 +79,7 @@ def main():
                 - [NDVI Map](#ndvi-viewer-streamlit-app)
                 - [Map Legend](#map-legend)
                 - [Information](#information)
+                - [Interpreting the Results](#interpreting-the-results)
                 - [Environmental Index](#using-an-environmental-index-ndvi)
                 - [Data](#data-sentinel-2-imagery-and-l2a-product)
                 - [Process workflow](#process-workflow-geojson-aoi-date-range-and-classification)
@@ -322,6 +323,15 @@ def main():
     #### Miscs Infos - START
     st.subheader("Information")
 
+    st.write("#### Interpreting the Results")
+    st.write("When exploring the NDVI map, keep in mind:")
+    st.write("- Clouds, atmospheric conditions, and water bodies can affect the map's appearance.")
+    st.write("- Satellite sensors have limitations in distinguishing surface types, leading to color variations.")
+    st.write("- NDVI values vary with seasons, growth stages, and land cover changes.")
+    st.write("- The map provides visual insights rather than precise representations.")
+
+    st.write("Understanding these factors will help you interpret the results more effectively. This application aims to provide you with an informative visual aid for vegetation analysis.")
+
     ## NDVI/Environmental Index
     st.write("#### Using an Environmental Index - NDVI:")
     st.write("The [Normalized Difference Vegetation Index (NDVI)](https://eos.com/make-an-analysis/ndvi/) is an essential environmental index that provides insights into the health and density of vegetation. It is widely used in remote sensing and geospatial analysis to monitor changes in land cover, vegetation growth, and environmental conditions.")
@@ -361,7 +371,7 @@ def main():
     #### About App - START
     st.subheader("About:")
     st.markdown("This project was first developed by me ([IndigoWizard](https://github.com/IndigoWizard)) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) as a submission to the **Environemental Data Challenge** of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://mlh.io/).<br> I continued developing the base project to make it a feature-complete app. Check the project's GitHub Repo here: [IndigoWizard/NDVI-Viewer](https://github.com/IndigoWizard/NDVI-Viewer)",  unsafe_allow_html=True)
-    st.image("https://camo.githubusercontent.com/12e3c34cd0c7f1ef7be098e3d96845c7c35a01995aa56243363f57dbf970b692/68747470733a2f2f63646e2e646973636f72646170702e636f6d2f6174746163686d656e74732f3732373939363033373138383535303732382f313133383935393039393432363531373031322f696d6167652e706e67")
+    st.image("https://www.pixenli.com/image/Hn1xkB-6")
     #### About App - END
 
     #### Contributiuon - START
@@ -419,7 +429,7 @@ def main():
             margin-inline: 0;
         }
 
-        /*Sidebarl*/
+        /*Sidebar*/
         .css-1cypcdb{
             max-width: 260px;
         }
@@ -445,7 +455,15 @@ def main():
             padding: 0;
             font-weight: 600;
         }
-
+        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a {
+            text-decoration: none;
+        }
+        
+        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a:hover {
+            color: rgb(46, 206, 255);
+            transition: 0.3s ease-in-out;
+        }
+        
         /* Sidebar: socials*/
         div.css-rklnmr:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p {
             display: flex;
