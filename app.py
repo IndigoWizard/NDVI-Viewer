@@ -407,11 +407,8 @@ def main():
         .css-z5fcl4 {
             padding-block: 1rem;
         }
-        .css-1544g2n {
-            padding: 0 1rem;
-        }
 
-        /* Upload box */
+                /* Upload box */
         div.stAlert div.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al.st-am.st-cq.st-an.st-ao.st-ap.st-aq.st-ar.st-as.st-at.st-au.st-av.st-aw.st-ax.st-ay.st-bb.st-b0.st-b1.st-b2.st-b3.st-b4.st-b5.st-b6.st-b7 {
             height: 115px !important;
         }
@@ -430,9 +427,10 @@ def main():
         }
 
         /*Sidebar*/
-        .css-1cypcdb{
-            max-width: 260px;
+        .css-1544g2n {
+            padding: 0 1rem;
         }
+
         /*Sidebar : inside container*/
         .css-ge7e53 {
             width: fit-content;
