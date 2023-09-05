@@ -9,10 +9,10 @@ You can create area of interest shapefiles in GeoGSON format by going to [geojso
 ### Project structure
 
 ```
+  ├── .github
+  │   └── Contributing / PR template
   ├── .gitignore
   ├── app.py
-  ├── src
-  │   └── styling files
   ├── requirements.txt
   └── README
 ```
@@ -22,7 +22,7 @@ You can create area of interest shapefiles in GeoGSON format by going to [geojso
 
 This project was first developed as a submission to the Environemental Data Challenge of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://github.com/MLH). 
 
-![](https://cdn.discordapp.com/attachments/727996037188550728/1138959099426517012/image.png)
+![](https://www.pixenli.com/image/Hn1xkB-6)
 
 ### Credit
 
