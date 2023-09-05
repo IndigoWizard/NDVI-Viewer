@@ -408,13 +408,13 @@ def main():
             padding-block: 1rem;
         }
 
-                /* Upload box */
+        /* Upload info box */
         div.stAlert div.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al.st-am.st-cq.st-an.st-ao.st-ap.st-aq.st-ar.st-as.st-at.st-au.st-av.st-aw.st-ax.st-ay.st-bb.st-b0.st-b1.st-b2.st-b3.st-b4.st-b5.st-b6.st-b7 {
             height: 115px !important;
         }
 
         /*Upload button*/
-        .css-1erivf3.eqdbnj015 {
+        .css-1erivf3.e1b2p2ww15 {
             display: flex;
             flex-direction: column;
             align-items: inherit;
