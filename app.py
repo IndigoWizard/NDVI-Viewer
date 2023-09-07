@@ -19,9 +19,84 @@ st.set_page_config(
     }
 )
 
+st.markdown(
+"""
+<style>
+    /* Header*/
+    .css-1avcm0n{
+        height: 1rem;
+    }
+    /* Smooth scrolling*/
+    .main {
+        scroll-behavior: smooth;
+    }
+    /* main app body with less padding*/
+    .css-z5fcl4 {
+        padding-block: 0;
+    }
+
+    /*Sidebar*/
+    .css-1544g2n {
+        padding: 0 1rem;
+    }
+
+    /*Sidebar : inside container*/
+    .css-ge7e53 {
+        width: fit-content;
+    }
+
+    /*Sidebar : image*/
+    .css-1kyxreq {
+        display: block !important;
+    }
+
+    /*Sidebar : Navigation list*/
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li {
+        padding: 0;
+        margin: 0;
+        padding: 0;
+        font-weight: 600;
+    }
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a {
+        text-decoration: none;
+    }
+    
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a:hover {
+        color: rgb(46, 206, 255);
+        transition: 0.3s ease-in-out;
+    }
+    
+    /* Sidebar: socials*/
+    div.css-rklnmr:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p {
+        display: flex;
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    /* Upload info box */
+    /*Upload button*/
+    .css-1erivf3.e1b2p2ww15 {
+        display: flex;
+        flex-direction: column;
+        align-items: inherit;
+        font-size: 14px;
+    }
+    .css-u8hs99.eqdbnj014{
+        display: flex;
+        flex-direction: row;
+        margin-inline: 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Initializing the Earth Engine library
 # Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
-#ee.Initialize()
+ee.Initialize()
 # geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
@@ -401,71 +476,6 @@ def main():
     st.markdown(
     """
     <style>
-        /* Smooth scrolling*/
-        .main {
-            scroll-behavior: smooth;
-        }
-        /* main app body with less padding*/
-        .css-z5fcl4 {
-            padding-block: 1rem;
-        }
-
-        /*Upload button*/
-        .css-1erivf3.e1b2p2ww15 {
-            display: flex;
-            flex-direction: column;
-            align-items: inherit;
-            font-size: 14px;
-        }
-        .css-u8hs99.eqdbnj014{
-            display: flex;
-            flex-direction: row;
-            margin-inline: 0;
-        }
-
-        /*Sidebar*/
-        .css-1544g2n {
-            padding: 0 1rem;
-        }
-
-        /*Sidebar : inside container*/
-        .css-ge7e53 {
-            width: fit-content;
-        }
-
-        /*Sidebar : image*/
-        .css-1kyxreq {
-            display: block !important;
-        }
-
-        /*Sidebar : Navigation list*/
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) {
-            margin: 0;
-            padding: 0;
-            list-style: none;
-        }
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li {
-            padding: 0;
-            margin: 0;
-            padding: 0;
-            font-weight: 600;
-        }
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a {
-            text-decoration: none;
-        }
-        
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a:hover {
-            color: rgb(46, 206, 255);
-            transition: 0.3s ease-in-out;
-        }
-        
-        /* Sidebar: socials*/
-        div.css-rklnmr:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p {
-            display: flex;
-            flex-direction: row;
-            gap: 1rem;
-        }
-
         /*Map iframe*/
         iframe {
             width: 100%;
