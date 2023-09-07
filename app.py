@@ -101,10 +101,12 @@ def main():
     ## AOI GeoJSON input
     with st.container():
         with c2:
+            st.info("Cloud Coverage 🌥️")
+            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=20 , label_visibility="collapsed")
             st.info("Upload Area Of Interest GeoJSON file:")
             ## File upload
             # User input GeoJSON file
-            upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True, label_visibility ="collapsed")
+            upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
             # calling upload files function
             geometry_aoi = upload_files_proc(upload_files)
             st.write("Don't have a GeoJSON? Crete one at: [geojson.io](https://geojson.io/)")
@@ -117,7 +119,7 @@ def main():
             old_date = col1.date_input("old", datetime(2023, 3, 20), label_visibility="collapsed")
 
             col2.success("New NDVI Date 📅")
-            new_date = col2.date_input("new", datetime(2023, 7, 17), label_visibility="collapsed")
+            new_date = col2.date_input("new", label_visibility="collapsed")
 
             # Calculating time range
             # time stretch
@@ -166,13 +168,13 @@ def main():
             #### Satellite imagery Processing Section - START
             # Old Image collection
             old_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
             .filterDate(str_old_start_date, str_old_end_date) \
             .filterBounds(geometry_aoi)
 
             # New Image collection
             new_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
             .filterDate(str_new_start_date, str_new_end_date) \
             .filterBounds(geometry_aoi)
 
@@ -406,11 +408,6 @@ def main():
         /* main app body with less padding*/
         .css-z5fcl4 {
             padding-block: 1rem;
-        }
-
-        /* Upload info box */
-        div.stAlert div.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al.st-am.st-cq.st-an.st-ao.st-ap.st-aq.st-ar.st-as.st-at.st-au.st-av.st-aw.st-ax.st-ay.st-bb.st-b0.st-b1.st-b2.st-b3.st-b4.st-b5.st-b6.st-b7 {
-            height: 115px !important;
         }
 
         /*Upload button*/
