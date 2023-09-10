@@ -96,7 +96,7 @@ st.markdown(
 
 # Initializing the Earth Engine library
 # Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
-ee.Initialize()
+#ee.Initialize()
 # geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
@@ -169,6 +169,7 @@ def main():
 
     with st.container():
         st.title("NDVI Viewer Streamlit App")
+        st.markdown("**Monitor Vegetation Health by Viewing & Comparing NDVI Values Through Time and Location with Sentinel-2 Satellite Images on The Fly!**")
     
     # columns for input - map
     c1, c2 = st.columns([3, 1])
@@ -177,7 +178,7 @@ def main():
     with st.container():
         with c2:
             st.info("Cloud Coverage 🌥️")
-            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=20 , label_visibility="collapsed")
+            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=50 , label_visibility="collapsed")
             st.info("Upload Area Of Interest GeoJSON file:")
             ## File upload
             # User input GeoJSON file
@@ -190,10 +191,10 @@ def main():
     with st.container():
         with c1:
             col1, col2 = st.columns(2)
-            col1.warning("Old NDVI Date 📅")
-            old_date = col1.date_input("old", datetime(2023, 3, 20), label_visibility="collapsed")
+            col1.warning("Initial NDVI Date 📅")
+            old_date = col1.date_input("old", label_visibility="collapsed")
 
-            col2.success("New NDVI Date 📅")
+            col2.success("Updated NDVI Date 📅")
             new_date = col2.date_input("new", label_visibility="collapsed")
 
             # Calculating time range
@@ -325,18 +326,27 @@ def main():
             #### Satellite imagery Processing Section - END
 
             #### Layers section - START
-            # basemap layers
-            m.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
-            m.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
+            # Check if the old and new dates are the same
+            if old_date == new_date:
+                # Only display the layers based on the new date without dates in their names
+                m.add_ee_layer(new_tci_image, tci_params, 'Satellite Imagery')
+                m.add_ee_layer(new_ndvi, ndvi_params, 'Raw NDVI')
+                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+            else:
+                # Show both dates in the appropriate layers
+                # Satellite image
+                m.add_ee_layer(old_tci_image, tci_params, f'Initial Satellite Imagery: {old_date}')
+                m.add_ee_layer(new_tci_image, tci_params, f'Updateed Satellite Imagery: {new_date}')
 
-            # NDVI
-            m.add_ee_layer(old_ndvi, ndvi_params, 'Old Raw NDVI')
-            m.add_ee_layer(new_ndvi, ndvi_params, 'New Raw NDVI')
+                # NDVI
+                m.add_ee_layer(old_ndvi, ndvi_params, f'Initial Raw NDVI: {old_date}')
+                m.add_ee_layer(new_ndvi, ndvi_params, f'Updateed Raw NDVI: {new_date}')
 
-            # Add layers to the second map (m.m2)
-            # Classified NDVI
-            m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
-            m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
+                # Add layers to the second map (m.m2)
+                # Classified NDVI
+                m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {old_date}')
+                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, f'Updateed Reclassified NDVI: {new_date}')
+
 
             #### Layers section - END
 
