@@ -19,6 +19,81 @@ st.set_page_config(
     }
 )
 
+st.markdown(
+"""
+<style>
+    /* Header*/
+    .css-1avcm0n{
+        height: 1rem;
+    }
+    /* Smooth scrolling*/
+    .main {
+        scroll-behavior: smooth;
+    }
+    /* main app body with less padding*/
+    .css-z5fcl4 {
+        padding-block: 0;
+    }
+
+    /*Sidebar*/
+    .css-1544g2n {
+        padding: 0 1rem;
+    }
+
+    /*Sidebar : inside container*/
+    .css-ge7e53 {
+        width: fit-content;
+    }
+
+    /*Sidebar : image*/
+    .css-1kyxreq {
+        display: block !important;
+    }
+
+    /*Sidebar : Navigation list*/
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li {
+        padding: 0;
+        margin: 0;
+        padding: 0;
+        font-weight: 600;
+    }
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a {
+        text-decoration: none;
+    }
+    
+    div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a:hover {
+        color: rgb(46, 206, 255);
+        transition: 0.3s ease-in-out;
+    }
+    
+    /* Sidebar: socials*/
+    div.css-rklnmr:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p {
+        display: flex;
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    /* Upload info box */
+    /*Upload button*/
+    .css-1erivf3.e1b2p2ww15 {
+        display: flex;
+        flex-direction: column;
+        align-items: inherit;
+        font-size: 14px;
+    }
+    .css-u8hs99.eqdbnj014{
+        display: flex;
+        flex-direction: row;
+        margin-inline: 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Initializing the Earth Engine library
 # Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
 #ee.Initialize()
@@ -94,6 +169,7 @@ def main():
 
     with st.container():
         st.title("NDVI Viewer Streamlit App")
+        st.markdown("**Monitor Vegetation Health by Viewing & Comparing NDVI Values Through Time and Location with Sentinel-2 Satellite Images on The Fly!**")
     
     # columns for input - map
     c1, c2 = st.columns([3, 1])
@@ -101,10 +177,12 @@ def main():
     ## AOI GeoJSON input
     with st.container():
         with c2:
+            st.info("Cloud Coverage 🌥️")
+            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=50 , label_visibility="collapsed")
             st.info("Upload Area Of Interest GeoJSON file:")
             ## File upload
             # User input GeoJSON file
-            upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True, label_visibility ="collapsed")
+            upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
             # calling upload files function
             geometry_aoi = upload_files_proc(upload_files)
             st.write("Don't have a GeoJSON? Crete one at: [geojson.io](https://geojson.io/)")
@@ -113,11 +191,11 @@ def main():
     with st.container():
         with c1:
             col1, col2 = st.columns(2)
-            col1.warning("Old NDVI Date 📅")
-            old_date = col1.date_input("old", datetime(2023, 3, 20), label_visibility="collapsed")
+            col1.warning("Initial NDVI Date 📅")
+            old_date = col1.date_input("old", label_visibility="collapsed")
 
-            col2.success("New NDVI Date 📅")
-            new_date = col2.date_input("new", datetime(2023, 7, 17), label_visibility="collapsed")
+            col2.success("Updated NDVI Date 📅")
+            new_date = col2.date_input("new", label_visibility="collapsed")
 
             # Calculating time range
             # time stretch
@@ -166,13 +244,13 @@ def main():
             #### Satellite imagery Processing Section - START
             # Old Image collection
             old_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
             .filterDate(str_old_start_date, str_old_end_date) \
             .filterBounds(geometry_aoi)
 
             # New Image collection
             new_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 100)) \
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
             .filterDate(str_new_start_date, str_new_end_date) \
             .filterBounds(geometry_aoi)
 
@@ -248,18 +326,27 @@ def main():
             #### Satellite imagery Processing Section - END
 
             #### Layers section - START
-            # basemap layers
-            m.add_ee_layer(old_tci_image, tci_params, 'Old Satellite Imagery')
-            m.add_ee_layer(new_tci_image, tci_params, 'New Satellite Imagery')
+            # Check if the old and new dates are the same
+            if old_date == new_date:
+                # Only display the layers based on the new date without dates in their names
+                m.add_ee_layer(new_tci_image, tci_params, 'Satellite Imagery')
+                m.add_ee_layer(new_ndvi, ndvi_params, 'Raw NDVI')
+                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+            else:
+                # Show both dates in the appropriate layers
+                # Satellite image
+                m.add_ee_layer(old_tci_image, tci_params, f'Initial Satellite Imagery: {old_date}')
+                m.add_ee_layer(new_tci_image, tci_params, f'Updateed Satellite Imagery: {new_date}')
 
-            # NDVI
-            m.add_ee_layer(old_ndvi, ndvi_params, 'Old Raw NDVI')
-            m.add_ee_layer(new_ndvi, ndvi_params, 'New Raw NDVI')
+                # NDVI
+                m.add_ee_layer(old_ndvi, ndvi_params, f'Initial Raw NDVI: {old_date}')
+                m.add_ee_layer(new_ndvi, ndvi_params, f'Updateed Raw NDVI: {new_date}')
 
-            # Add layers to the second map (m.m2)
-            # Classified NDVI
-            m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, 'Old Reclassified NDVI')
-            m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'New Reclassified NDVI')
+                # Add layers to the second map (m.m2)
+                # Classified NDVI
+                m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {old_date}')
+                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, f'Updateed Reclassified NDVI: {new_date}')
+
 
             #### Layers section - END
 
@@ -399,76 +486,6 @@ def main():
     st.markdown(
     """
     <style>
-        /* Smooth scrolling*/
-        .main {
-            scroll-behavior: smooth;
-        }
-        /* main app body with less padding*/
-        .css-z5fcl4 {
-            padding-block: 1rem;
-        }
-
-                /* Upload box */
-        div.stAlert div.st-ae.st-af.st-ag.st-ah.st-ai.st-aj.st-ak.st-al.st-am.st-cq.st-an.st-ao.st-ap.st-aq.st-ar.st-as.st-at.st-au.st-av.st-aw.st-ax.st-ay.st-bb.st-b0.st-b1.st-b2.st-b3.st-b4.st-b5.st-b6.st-b7 {
-            height: 115px !important;
-        }
-
-        /*Upload button*/
-        .css-1erivf3.eqdbnj015 {
-            display: flex;
-            flex-direction: column;
-            align-items: inherit;
-            font-size: 14px;
-        }
-        .css-u8hs99.eqdbnj014{
-            display: flex;
-            flex-direction: row;
-            margin-inline: 0;
-        }
-
-        /*Sidebar*/
-        .css-1544g2n {
-            padding: 0 1rem;
-        }
-
-        /*Sidebar : inside container*/
-        .css-ge7e53 {
-            width: fit-content;
-        }
-
-        /*Sidebar : image*/
-        .css-1kyxreq {
-            display: block !important;
-        }
-
-        /*Sidebar : Navigation list*/
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) {
-            margin: 0;
-            padding: 0;
-            list-style: none;
-        }
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li {
-            padding: 0;
-            margin: 0;
-            padding: 0;
-            font-weight: 600;
-        }
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a {
-            text-decoration: none;
-        }
-        
-        div.element-container:nth-child(4) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(1) > li > a:hover {
-            color: rgb(46, 206, 255);
-            transition: 0.3s ease-in-out;
-        }
-        
-        /* Sidebar: socials*/
-        div.css-rklnmr:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p {
-            display: flex;
-            flex-direction: row;
-            gap: 1rem;
-        }
-
         /*Map iframe*/
         iframe {
             width: 100%;
