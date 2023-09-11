@@ -168,27 +168,53 @@ def main():
         st.caption("ʕ •ᴥ•ʔ Star⭐the [project on GitHub](https://github.com/IndigoWizard/NDVI-Viewer/)!")
 
     with st.container():
-        st.title("NDVI Viewer Streamlit App")
+        st.title("NDVI Viewer")
         st.markdown("**Monitor Vegetation Health by Viewing & Comparing NDVI Values Through Time and Location with Sentinel-2 Satellite Images on The Fly!**")
     
     # columns for input - map
     c1, c2 = st.columns([3, 1])
     #### User input section - START
-    ## AOI GeoJSON input
+    
     with st.container():
         with c2:
+        ## Cloud coverage input
             st.info("Cloud Coverage 🌥️")
-            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=50 , label_visibility="collapsed")
-            st.info("Upload Area Of Interest GeoJSON file:")
-            ## File upload
+            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=75 , label_visibility="collapsed")
+
+        ## File upload
             # User input GeoJSON file
-            upload_files = st.file_uploader("Choose a GeoJSON file", accept_multiple_files=True)
+            st.info("Upload Area Of Interest file:")
+            upload_files = st.file_uploader("Crete a GeoJSON file at: [geojson.io](https://geojson.io/)", accept_multiple_files=True)
             # calling upload files function
             geometry_aoi = upload_files_proc(upload_files)
-            st.write("Don't have a GeoJSON? Crete one at: [geojson.io](https://geojson.io/)")
+        
+        ## Accessibility: Color palette input
+            st.info("Custom Color Palettes")
+            accessibility = st.selectbox("Accessibility: Colorblind-friendly Palettes", ["Normal", "Deuteranomaly", "Protanomaly", "Tritanomaly", "Achromatopsia"])
 
-    ## Time range input
+            # Define default color palettes: used in map layers & map legend
+            default_ndvi_palette = ["#ffffe5", "#f7fcb9", "#78c679", "#41ab5d", "#238443", "#005a32"]
+            default_reclassified_ndvi_palette = ["#a50026","#ed5e3d","#f9f7ae","#f4ff78","#9ed569","#229b51","#006837"]
+            
+            # a copy of default colors that can be reaffected
+            ndvi_palette = default_ndvi_palette.copy() 
+            reclassified_ndvi_palette = default_reclassified_ndvi_palette.copy()
+
+            if accessibility == "Deuteranomaly":
+                ndvi_palette = ["#fffaa1","#f4ef8e","#9a5d67","#573f73","#372851","#191135"]
+                reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
+            elif accessibility == "Protanomaly":
+                ndvi_palette = ["#a6f697","#7def75","#2dcebb","#1597ab","#0c677e","#002c47"]
+                reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
+            elif accessibility == "Tritanomaly":
+                ndvi_palette = ["#cdffd7","#a1fbb6","#6cb5c6","#3a77a5","#205080","#001752"]
+                reclassified_ndvi_palette = ["#ed4700","#ed8a00","#e1fabe","#99ff94","#87bede","#2e40cf","#0600bc"]
+            elif accessibility == "Achromatopsia":
+                ndvi_palette = ["#407de0", "#2763da", "#394388", "#272c66", "#16194f", "#010034"]
+                reclassified_ndvi_palette = ["#004f3d", "#338796", "#66a4f5", "#3683ff", "#3d50ca", "#421c7f", "#290058"]
+
     with st.container():
+    ## Time range input
         with c1:
             col1, col2 = st.columns(2)
             col1.warning("Initial NDVI Date 📅")
@@ -220,24 +246,27 @@ def main():
 
             #### Map section - START
             # Setting up main map
-            m = folium.Map(location=[36.45, 2.85], tiles='Open Street Map', zoom_start=9, control_scale=True)
+            m = folium.Map(location=[36.45, 2.85], tiles=None, zoom_start=9, control_scale=True)
 
             ### BASEMAPS - START
             ## Primary basemaps
+            # OSM
+            b0 = folium.TileLayer('Open Street Map', name="Open Street Map")
+            b0.add_to(m)
             # CartoDB Dark Matter basemap
-            b1 = folium.TileLayer('cartodbdark_matter', name='Dark Matter Basemap')
+            b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap')
             b1.add_to(m)
 
             ## WMS tiles basemaps
             # OSM CyclOSM basemap 
-            b2 = WmsTileLayer(
-                url=('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'),
-                layers=None,
-                name='Topography Basemap', # layer name to display on layer panel
-                attr='Topography Map',
-                show=False
-            )
-            b2.add_to(m)
+            # b2 = WmsTileLayer(
+            #     url=('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'),
+            #     layers=None,
+            #     name='Topography Basemap', # layer name to display on layer panel
+            #     attr='Topography Map',
+            #     show=False
+            # )
+            # b2.add_to(m)
             ### BASEMAPS - END
             #### Map section - END
 
@@ -288,7 +317,7 @@ def main():
             ndvi_params = {
             'min': 0,
             'max': 1,
-            'palette': ['#ffffe5', '#f7fcb9', '#78c679', '#41ab5d', '#238443', '#005a32']
+            'palette': ndvi_palette
             }
 
             # Masking NDVI over the water & show only land
@@ -319,7 +348,7 @@ def main():
             ndvi_classified_params = {
             'min': 1,
             'max': 7,
-            'palette': ['#a50026', '#ed5e3d', '#f9f7ae', '#fec978', '#9ed569', '#229b51', '#006837']
+            'palette': reclassified_ndvi_palette
             # each color corresponds to an NDVI class.
             }
 
@@ -352,7 +381,7 @@ def main():
 
             #### Map result display - START
             # Folium Map Layer Control: we can see and interact with map layers
-            folium.LayerControl(collapsed=False).add_to(m)
+            folium.LayerControl(collapsed=True).add_to(m)
             # Display the map
             folium_static(m)
 
@@ -363,15 +392,13 @@ def main():
         st.subheader("Map Legend:")
         col3, col4, col5 = st.columns([1,2,1])
 
-        with col3:
-            # Define NDVI color palette hex codes
-            ndvi_palette = ['#ffffe5', '#f7fcb9', '#78c679', '#41ab5d', '#238443', '#005a32']
+        with col3:            
             # Create an HTML legend for NDVI classes
             ndvi_legend_html = """
                 <div class="ndvilegend" style="border-radius: 5px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); background: rgba(0, 0, 0, 0.05);">
                     <h5>Raw NDVI</h5>
                     <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 1rem; width: 100%;">
-                        <div style="width: 30px; height: 200px; background: linear-gradient(#ffffe5, #005a32);"></div>
+                        <div style="width: 30px; height: 200px; background: linear-gradient({0},{1},{2},{3},{4},{5});"></div>
                         <div style="display: flex; flex-direction: column; justify-content: space-between; height: 200px;">
                             <span>-1</span>
                             <span style="align-self: flex-end;">1</span>
@@ -383,15 +410,13 @@ def main():
             # Display the NDVI legend using st.markdown
             st.markdown(ndvi_legend_html, unsafe_allow_html=True)
 
-        with col4:
-            # Define reclassified NDVI color palette hex codes
-            reclassified_ndvi_palette = ['#a50026', '#ed5e3d', '#f9f7ae', '#fec978', '#9ed569', '#229b51', '#006837']
+        with col4:            
             # Create an HTML legend for NDVI classes
             reclassified_ndvi_legend_html = """
                 <div class="reclassifiedndvi" style="border-radius: 5px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); background: rgba(0, 0, 0, 0.05);">
                     <h5>Reclassified NDVI</h5>
                     <ul style="list-style-type: none; padding: 0;">
-                        <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {0};">&#9632;</span> Absent Vegetation. (Water/Built-up/Rocky/Sandy Surfaces..)</li>
+                        <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {0};">&#9632;</span> Absent Vegetation. (Water/Clouds/Built-up/Rocks/Sand Surfaces..)</li>
                         <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {1};">&#9632;</span> Bare Soil.</li>
                         <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {2};">&#9632;</span> Low Vegetation.</li>
                         <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {3};">&#9632;</span> Light Vegetation.</li>
