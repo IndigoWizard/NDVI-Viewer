@@ -96,7 +96,7 @@ st.markdown(
 
 # Initializing the Earth Engine library
 # Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
-#ee.Initialize()
+ee.Initialize()
 # geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
@@ -117,6 +117,23 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
+
+# Defining a function to create and filter a GEE image collection for results
+def satCollection(cloudRate, initialDate, updatedDate, aoi):
+    collection = ee.ImageCollection('COPERNICUS/S2_SR') \
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudRate)) \
+        .filterDate(initialDate, updatedDate) \
+        .filterBounds(aoi)
+    
+    # Defining a function to clip the colleciton to the area of interst
+    def clipCollection(image):
+        return image.clip(aoi).divide(10000)
+    
+    # clipping the collection
+    collection = collection.map(clipCollection)
+    
+    return collection
+
 
 # Uplaod function 
 def upload_files_proc(upload_files):
@@ -271,25 +288,15 @@ def main():
             #### Map section - END
 
             #### Satellite imagery Processing Section - START
+            ## Defining and clipping image collections for both dates:
             # Old Image collection
-            old_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
-            .filterDate(str_old_start_date, str_old_end_date) \
-            .filterBounds(geometry_aoi)
-
+            old_collection = satCollection(cloud_pixel_percentage, str_old_start_date, str_old_end_date, geometry_aoi)
             # New Image collection
-            new_collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pixel_percentage)) \
-            .filterDate(str_new_start_date, str_new_end_date) \
-            .filterBounds(geometry_aoi)
+            new_collection = satCollection(cloud_pixel_percentage, str_new_start_date, str_new_end_date, geometry_aoi)
 
-            # clipping the main collection to the aoi geometry
-            old_clipped_collection = old_collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
-            new_clipped_collection = new_collection.map(lambda image: image.clip(geometry_aoi).divide(10000))
-            
             # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
-            old_sat_imagery = old_clipped_collection.median()
-            new_sat_imagery = new_clipped_collection.median()
+            old_sat_imagery = old_collection.median()
+            new_sat_imagery = new_collection.median()
 
             ## TCI (True Color Imagery)
             # Clipping the image to the area of interest "aoi"
