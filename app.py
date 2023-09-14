@@ -96,7 +96,7 @@ st.markdown(
 
 # Initializing the Earth Engine library
 # Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
-ee.Initialize()
+#ee.Initialize()
 # geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
@@ -128,12 +128,9 @@ def satCollection(cloudRate, initialDate, updatedDate, aoi):
     # Defining a function to clip the colleciton to the area of interst
     def clipCollection(image):
         return image.clip(aoi).divide(10000)
-    
     # clipping the collection
     collection = collection.map(clipCollection)
-    
     return collection
-
 
 # Uplaod function 
 def upload_files_proc(upload_files):
@@ -155,6 +152,15 @@ def upload_files_proc(upload_files):
         # Set default geometry if no file uploaded
         geometry_aoi = ee.Geometry.Point([27.98, 36.13])
     return geometry_aoi
+
+# Time input processing function
+def date_input_proc(input_date, time_range):
+    end_date = input_date
+    start_date = input_date - timedelta(days=time_range)
+    
+    str_start_date = start_date.strftime('%Y-%m-%d')
+    str_end_date = end_date.strftime('%Y-%m-%d')
+    return str_start_date, str_end_date
 
 # Main function to run the Streamlit app
 def main():
@@ -231,35 +237,23 @@ def main():
                 reclassified_ndvi_palette = ["#004f3d", "#338796", "#66a4f5", "#3683ff", "#3d50ca", "#421c7f", "#290058"]
 
     with st.container():
-    ## Time range input
+        ## Time range input
         with c1:
             col1, col2 = st.columns(2)
             col1.warning("Initial NDVI Date 📅")
-            old_date = col1.date_input("old", label_visibility="collapsed")
+            initial_date = col1.date_input("initial", label_visibility="collapsed")
 
             col2.success("Updated NDVI Date 📅")
-            new_date = col2.date_input("new", label_visibility="collapsed")
+            updated_date = col2.date_input("updated", label_visibility="collapsed")
 
-            # Calculating time range
-            # time stretch
-            days_before = 7
-            # old time range
-            old_start_date = old_date - timedelta(days=days_before)
-            old_end_date = old_date
+            time_range = 7
+            # Process initial date
+            str_initial_start_date, str_initial_end_date = date_input_proc(initial_date, time_range)
 
-            # new time range
-            new_start_date = new_date - timedelta(days=days_before)
-            new_end_date = new_date
-
-            # converting date input to gee filter format before passing it in
-            # old
-            str_old_start_date = old_start_date.strftime('%Y-%m-%d')
-            str_old_end_date = old_end_date.strftime('%Y-%m-%d')
-            # new
-            str_new_start_date = new_start_date.strftime('%Y-%m-%d')
-            str_new_end_date = new_end_date.strftime('%Y-%m-%d')
-
-            #### User input section - END
+            # Process updated date
+            str_updated_start_date, str_updated_end_date = date_input_proc(updated_date, time_range)
+    
+    #### User input section - END
 
             #### Map section - START
             # Setting up main map
@@ -289,19 +283,19 @@ def main():
 
             #### Satellite imagery Processing Section - START
             ## Defining and clipping image collections for both dates:
-            # Old Image collection
-            old_collection = satCollection(cloud_pixel_percentage, str_old_start_date, str_old_end_date, geometry_aoi)
-            # New Image collection
-            new_collection = satCollection(cloud_pixel_percentage, str_new_start_date, str_new_end_date, geometry_aoi)
+            # initial Image collection
+            initial_collection = satCollection(cloud_pixel_percentage, str_initial_start_date, str_initial_end_date, geometry_aoi)
+            # updated Image collection
+            updated_collection = satCollection(cloud_pixel_percentage, str_updated_start_date, str_updated_end_date, geometry_aoi)
 
             # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
-            old_sat_imagery = old_collection.median()
-            new_sat_imagery = new_collection.median()
+            initial_sat_imagery = initial_collection.median()
+            updated_sat_imagery = updated_collection.median()
 
             ## TCI (True Color Imagery)
             # Clipping the image to the area of interest "aoi"
-            old_tci_image = old_sat_imagery
-            new_tci_image = new_sat_imagery
+            initial_tci_image = initial_sat_imagery
+            updated_tci_image = updated_sat_imagery
 
             # TCI image visual parameters
             tci_params = {
@@ -317,8 +311,8 @@ def main():
                 return collection.normalizedDifference(['B8', 'B4'])
 
             # clipping to AOI
-            old_ndvi = getNDVI(old_sat_imagery)
-            new_ndvi = getNDVI(new_sat_imagery)
+            initial_ndvi = getNDVI(initial_sat_imagery)
+            updated_ndvi = getNDVI(updated_sat_imagery)
 
             # NDVI visual parameters:
             ndvi_params = {
@@ -328,28 +322,28 @@ def main():
             }
 
             # Masking NDVI over the water & show only land
-            old_ndvi = old_ndvi.updateMask(old_ndvi.gte(0))
-            new_ndvi = new_ndvi.updateMask(new_ndvi.gte(0))
+            initial_ndvi = initial_ndvi.updateMask(initial_ndvi.gte(0))
+            updated_ndvi = updated_ndvi.updateMask(updated_ndvi.gte(0))
 
             # ##### NDVI classification: 7 classes
-            old_ndvi_classified = ee.Image(old_ndvi) \
-            .where(old_ndvi.gte(0).And(old_ndvi.lt(0.15)), 1) \
-            .where(old_ndvi.gte(0.15).And(old_ndvi.lt(0.25)), 2) \
-            .where(old_ndvi.gte(0.25).And(old_ndvi.lt(0.35)), 3) \
-            .where(old_ndvi.gte(0.35).And(old_ndvi.lt(0.45)), 4) \
-            .where(old_ndvi.gte(0.45).And(old_ndvi.lt(0.65)), 5) \
-            .where(old_ndvi.gte(0.65).And(old_ndvi.lt(0.75)), 6) \
-            .where(old_ndvi.gte(0.75), 7) \
+            initial_ndvi_classified = ee.Image(initial_ndvi) \
+            .where(initial_ndvi.gte(0).And(initial_ndvi.lt(0.15)), 1) \
+            .where(initial_ndvi.gte(0.15).And(initial_ndvi.lt(0.25)), 2) \
+            .where(initial_ndvi.gte(0.25).And(initial_ndvi.lt(0.35)), 3) \
+            .where(initial_ndvi.gte(0.35).And(initial_ndvi.lt(0.45)), 4) \
+            .where(initial_ndvi.gte(0.45).And(initial_ndvi.lt(0.65)), 5) \
+            .where(initial_ndvi.gte(0.65).And(initial_ndvi.lt(0.75)), 6) \
+            .where(initial_ndvi.gte(0.75), 7) \
             
             # ##### NDVI classification: 7 classes
-            new_ndvi_classified = ee.Image(new_ndvi) \
-            .where(new_ndvi.gte(0).And(new_ndvi.lt(0.15)), 1) \
-            .where(new_ndvi.gte(0.15).And(new_ndvi.lt(0.25)), 2) \
-            .where(new_ndvi.gte(0.25).And(new_ndvi.lt(0.35)), 3) \
-            .where(new_ndvi.gte(0.35).And(new_ndvi.lt(0.45)), 4) \
-            .where(new_ndvi.gte(0.45).And(new_ndvi.lt(0.65)), 5) \
-            .where(new_ndvi.gte(0.65).And(new_ndvi.lt(0.75)), 6) \
-            .where(new_ndvi.gte(0.75), 7) \
+            updated_ndvi_classified = ee.Image(updated_ndvi) \
+            .where(updated_ndvi.gte(0).And(updated_ndvi.lt(0.15)), 1) \
+            .where(updated_ndvi.gte(0.15).And(updated_ndvi.lt(0.25)), 2) \
+            .where(updated_ndvi.gte(0.25).And(updated_ndvi.lt(0.35)), 3) \
+            .where(updated_ndvi.gte(0.35).And(updated_ndvi.lt(0.45)), 4) \
+            .where(updated_ndvi.gte(0.45).And(updated_ndvi.lt(0.65)), 5) \
+            .where(updated_ndvi.gte(0.65).And(updated_ndvi.lt(0.75)), 6) \
+            .where(updated_ndvi.gte(0.75), 7) \
 
             # Classified NDVI visual parameters
             ndvi_classified_params = {
@@ -362,26 +356,26 @@ def main():
             #### Satellite imagery Processing Section - END
 
             #### Layers section - START
-            # Check if the old and new dates are the same
-            if old_date == new_date:
-                # Only display the layers based on the new date without dates in their names
-                m.add_ee_layer(new_tci_image, tci_params, 'Satellite Imagery')
-                m.add_ee_layer(new_ndvi, ndvi_params, 'Raw NDVI')
-                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+            # Check if the initial and updated dates are the same
+            if initial_date == updated_date:
+                # Only display the layers based on the updated date without dates in their names
+                m.add_ee_layer(updated_tci_image, tci_params, 'Satellite Imagery')
+                m.add_ee_layer(updated_ndvi, ndvi_params, 'Raw NDVI')
+                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
             else:
                 # Show both dates in the appropriate layers
                 # Satellite image
-                m.add_ee_layer(old_tci_image, tci_params, f'Initial Satellite Imagery: {old_date}')
-                m.add_ee_layer(new_tci_image, tci_params, f'Updateed Satellite Imagery: {new_date}')
+                m.add_ee_layer(initial_tci_image, tci_params, f'Initial Satellite Imagery: {initial_date}')
+                m.add_ee_layer(updated_tci_image, tci_params, f'Updated Satellite Imagery: {updated_date}')
 
                 # NDVI
-                m.add_ee_layer(old_ndvi, ndvi_params, f'Initial Raw NDVI: {old_date}')
-                m.add_ee_layer(new_ndvi, ndvi_params, f'Updateed Raw NDVI: {new_date}')
+                m.add_ee_layer(initial_ndvi, ndvi_params, f'Initial Raw NDVI: {initial_date}')
+                m.add_ee_layer(updated_ndvi, ndvi_params, f'Updated Raw NDVI: {updated_date}')
 
                 # Add layers to the second map (m.m2)
                 # Classified NDVI
-                m.add_ee_layer(old_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {old_date}')
-                m.add_ee_layer(new_ndvi_classified, ndvi_classified_params, f'Updateed Reclassified NDVI: {new_date}')
+                m.add_ee_layer(initial_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {initial_date}')
+                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, f'Updated Reclassified NDVI: {updated_date}')
 
 
             #### Layers section - END
