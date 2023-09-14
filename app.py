@@ -322,28 +322,30 @@ def main():
             }
 
             # Masking NDVI over the water & show only land
-            initial_ndvi = initial_ndvi.updateMask(initial_ndvi.gte(0))
-            updated_ndvi = updated_ndvi.updateMask(updated_ndvi.gte(0))
+            def satImageMask(sat_image):
+                masked_image = sat_image.updateMask(sat_image.gte(0))
+                return masked_image
+            
+            # Mask NDVI images
+            initial_ndvi = satImageMask(initial_ndvi)
+            updated_ndvi = satImageMask(updated_ndvi)
 
             # ##### NDVI classification: 7 classes
-            initial_ndvi_classified = ee.Image(initial_ndvi) \
-            .where(initial_ndvi.gte(0).And(initial_ndvi.lt(0.15)), 1) \
-            .where(initial_ndvi.gte(0.15).And(initial_ndvi.lt(0.25)), 2) \
-            .where(initial_ndvi.gte(0.25).And(initial_ndvi.lt(0.35)), 3) \
-            .where(initial_ndvi.gte(0.35).And(initial_ndvi.lt(0.45)), 4) \
-            .where(initial_ndvi.gte(0.45).And(initial_ndvi.lt(0.65)), 5) \
-            .where(initial_ndvi.gte(0.65).And(initial_ndvi.lt(0.75)), 6) \
-            .where(initial_ndvi.gte(0.75), 7) \
-            
-            # ##### NDVI classification: 7 classes
-            updated_ndvi_classified = ee.Image(updated_ndvi) \
-            .where(updated_ndvi.gte(0).And(updated_ndvi.lt(0.15)), 1) \
-            .where(updated_ndvi.gte(0.15).And(updated_ndvi.lt(0.25)), 2) \
-            .where(updated_ndvi.gte(0.25).And(updated_ndvi.lt(0.35)), 3) \
-            .where(updated_ndvi.gte(0.35).And(updated_ndvi.lt(0.45)), 4) \
-            .where(updated_ndvi.gte(0.45).And(updated_ndvi.lt(0.65)), 5) \
-            .where(updated_ndvi.gte(0.65).And(updated_ndvi.lt(0.75)), 6) \
-            .where(updated_ndvi.gte(0.75), 7) \
+            def classify_ndvi(masked_image): # better used an masked image to avoid water bodies obstracting the result
+                ndvi_classified = ee.Image(masked_image) \
+                .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
+                .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
+                .where(masked_image.gte(0.25).And(masked_image.lt(0.35)), 3) \
+                .where(masked_image.gte(0.35).And(masked_image.lt(0.45)), 4) \
+                .where(masked_image.gte(0.45).And(masked_image.lt(0.65)), 5) \
+                .where(masked_image.gte(0.65).And(masked_image.lt(0.75)), 6) \
+                .where(masked_image.gte(0.75), 7) \
+                
+                return ndvi_classified
+
+            # Classify masked NDVI
+            initial_ndvi_classified = classify_ndvi(initial_ndvi)
+            updated_ndvi_classified = classify_ndvi(updated_ndvi)
 
             # Classified NDVI visual parameters
             ndvi_classified_params = {
