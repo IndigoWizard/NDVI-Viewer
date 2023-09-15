@@ -174,17 +174,17 @@ def main():
         st.subheader("Navigation:")
         st.markdown(
             """
-                - [NDVI Map](#ndvi-viewer-streamlit-app)
+                - [NDVI Map](#ndvi-viewer)
                 - [Map Legend](#map-legend)
-                - [Information](#information)
+                - [Process workflow](#process-workflow-aoi-date-range-and-classification)
                 - [Interpreting the Results](#interpreting-the-results)
                 - [Environmental Index](#using-an-environmental-index-ndvi)
                 - [Data](#data-sentinel-2-imagery-and-l2a-product)
-                - [Process workflow](#process-workflow-geojson-aoi-date-range-and-classification)
                 - [About](#about)
                 - [Contribution](#contribute-to-the-app)
                 - [Credit](#credit)
             """)
+    
         st.subheader("Contact:")
         st.markdown("[![LinkedIn](https://static.licdn.com/sc/h/8s162nmbcnfkg7a0k8nq9wwqo)](https://linkedin.com/in/ahmed-islem-mokhtari) [![GitHub](https://github.githubassets.com/favicons/favicon-dark.png)](https://github.com/IndigoWizard) [![Medium](https://miro.medium.com/1*m-R_BkNf1Qjr1YbyOIJY2w.png)](https://medium.com/@Indigo.Wizard/mt-chenoua-forest-fires-analysis-with-remote-sensing-614681f468e9)")
 
@@ -438,8 +438,24 @@ def main():
     #### Miscs Infos - START
     st.subheader("Information")
 
+    ## How It Works
+    st.write("#### Process workflow: AOI, Date Range, and Classification")
+    st.write("This app provides a simple interface to explore NDVI changes over time for a specified Area of Interest (AOI). Here's how it works:")
+
+    st.write("1. **Upload GeoJSON AOI:** Start by uploading a GeoJSON file that outlines your Area of Interest. This defines the region where NDVI analysis will be performed. You can create any polygon-shaped area of interest at [geojson.io](https://geojson.io).")
+    st.write("2. **Select Date Range:** Choose a date, this input will triggers the app to gather images from a **7-days range** leading to that date. These images blend into a mosaic that highlights vegetation patterns while minimizing disruptions like clouds. ")
+    st.write("2. **Select Cloud Coverate Rate:** Choose a value for cloud coverage, this input will triggers the app to gather images with relevant value of clouds covering the images. A higher value will gather more images but may be of poor quality, lower cloud coverage value gathers clearer images, but may have less images in the collection.")
+    st.write("3. **Image Collection and Processing:** Once the date range is established, the app collects satellite images spanning that period. These images are then clipped to your chosen Area of Interest (AOI) and undergo processing to derive raw NDVI values using wavelength calculations. This method ensures that the resulting NDVI map accurately reflects the vegetation status within your specific region of interest.")
+    st.write("4. **NDVI Classification:** The raw NDVI results are classified into distinct vegetation classes. This classification provides a simplified visualization of vegetation density, aiding in interpretation.")
+    st.write("5. **Map Visualization:** The results are displayed on an interactive map, allowing you to explore NDVI patterns and changes within your AOI.")
+
+    st.write("This app is designed to provide an accessible tool for both technical and non-technical users to explore and interpret vegetation health and density changes.")
+    st.write("Keep in mind that while the NDVI map is a valuable tool, its interpretation requires consideration of various factors. Enjoy exploring the world of vegetation health and density!")
+
+    # Results interpretation
     st.write("#### Interpreting the Results")
     st.write("When exploring the NDVI map, keep in mind:")
+
     st.write("- Clouds, atmospheric conditions, and water bodies can affect the map's appearance.")
     st.write("- Satellite sensors have limitations in distinguishing surface types, leading to color variations.")
     st.write("- NDVI values vary with seasons, growth stages, and land cover changes.")
@@ -464,22 +480,6 @@ def main():
 
     st.write("The [Level-2A](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/product-types/level-2a) products have undergone atmospheric correction, enhancing the accuracy of surface reflectance values. These images are suitable for various land cover and vegetation analyses, including NDVI calculations.")
 
-    ## How It Works
-    st.write("#### Process workflow: AOI, Date Range, and Classification")
-    st.write("This app provides a simple interface to explore NDVI changes over time for a specified Area of Interest (AOI). Here's how it works:")
-
-    st.write("1. **Upload GeoJSON AOI:** Start by uploading a GeoJSON file that outlines your Area of Interest. This defines the region where NDVI analysis will be performed. You can create any polygon-shaped area of interest at [geojson.io](https://geojson.io).")
-
-    st.write("2. **Select Date Range:** Choose a date, this input will triggers the app to gather images from a **7-days range** leading to that date. These images blend into a mosaic that highlights vegetation patterns while minimizing disruptions like clouds. ")
-
-    st.write("3. **Image Collection and Processing:** Once the date range is established, the app collects satellite images spanning that period. These images are then clipped to your chosen Area of Interest (AOI) and undergo processing to derive raw NDVI values using wavelength calculations. This method ensures that the resulting NDVI map accurately reflects the vegetation status within your specific region of interest.")
-
-    st.write("4. **NDVI Classification:** The raw NDVI results are classified into distinct vegetation classes. This classification provides a simplified visualization of vegetation density, aiding in interpretation.")
-
-    st.write("5. **Map Visualization:** The results are displayed on an interactive map, allowing you to explore NDVI patterns and changes within your AOI.")
-
-    st.write("This app is designed to provide an accessible tool for both technical and non-technical users to explore and interpret vegetation health and density changes.")
-    st.write("Keep in mind that while the NDVI map is a valuable tool, its interpretation requires consideration of various factors. Enjoy exploring the world of vegetation health and density!")
 
     #### Miscs Info - END
 
