@@ -155,19 +155,21 @@ def upload_files_proc(upload_files):
         bytes_data = upload_file.read()
         # Parse GeoJSON data
         geojson_data = json.loads(bytes_data)
-        # Extract the coordinates from the GeoJSON data
-        coordinates = geojson_data['features'][0]['geometry']['coordinates']
-        # Creating gee geometry object based on coordinates
-        geometry = ee.Geometry.Polygon(coordinates)
-        # Adding geometry to the list
-        geometry_aoi_list.append(geometry)
-    # Combine multiple geometries from same/different files
+        # Extract all the features' coordinates from the GeoJSON data
+        for feature in geojson_data['features']:
+            coordinates = feature['geometry']['coordinates']
+            # Creating a geometry object based on coordinates
+            geometry = ee.Geometry.Polygon(coordinates)
+            # Adding geometry to the list
+            geometry_aoi_list.append(geometry)
+    # Combine multiple geometries from the same/different files
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
     else:
-        # Set default geometry if no file uploaded
+        # Set a default geometry if no file is uploaded
         geometry_aoi = ee.Geometry.Point([27.98, 36.13])
     return geometry_aoi
+
 
 # Time input processing function
 def date_input_proc(input_date, time_range):
