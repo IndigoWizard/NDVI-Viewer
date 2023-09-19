@@ -148,27 +148,36 @@ def satCollection(cloudRate, initialDate, updatedDate, aoi):
     collection = collection.map(clipCollection)
     return collection
 
-# Uplaod function 
+# Upload function
+# Define a global variable to store the centroid of the last uploaded geometry
+last_uploaded_centroid = None
+
+# Upload function
 def upload_files_proc(upload_files):
+    # A global variable to track the latest geojson uploaded
+    global last_uploaded_centroid
+    # Setting up a variable that takes all polygons/geometries within the same/different geojson
     geometry_aoi_list = []
+
     for upload_file in upload_files:
         bytes_data = upload_file.read()
-        # Parse GeoJSON data
         geojson_data = json.loads(bytes_data)
-        # Extract all the features' coordinates from the GeoJSON data
+
         for feature in geojson_data['features']:
             coordinates = feature['geometry']['coordinates']
-            # Creating a geometry object based on coordinates
             geometry = ee.Geometry.Polygon(coordinates)
-            # Adding geometry to the list
             geometry_aoi_list.append(geometry)
-    # Combine multiple geometries from the same/different files
+
+            # Update the last uploaded centroid
+            last_uploaded_centroid = geometry.centroid(maxError=1).getInfo()['coordinates']
+
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
     else:
-        # Set a default geometry if no file is uploaded
         geometry_aoi = ee.Geometry.Point([27.98, 36.13])
+
     return geometry_aoi
+
 
 
 # Time input processing function
@@ -274,8 +283,17 @@ def main():
     #### User input section - END
 
             #### Map section - START
-            # Setting up main map
-            m = folium.Map(location=[36.45, 2.85], tiles=None, zoom_start=9, control_scale=True)
+            global last_uploaded_centroid
+
+            # Create the initial map
+            if last_uploaded_centroid is not None:
+                latitude = last_uploaded_centroid[1]
+                longitude = last_uploaded_centroid[0]
+                m = folium.Map(location=[latitude, longitude], zoom_start=7, control_scale=True)
+            else:
+                # Default location if no file is uploaded
+                m = folium.Map(location=[36.45, 2.85], zoom_start=5, control_scale=True)
+
 
             ### BASEMAPS - START
             ## Primary basemaps
@@ -349,7 +367,7 @@ def main():
             updated_ndvi = satImageMask(updated_ndvi)
 
             # ##### NDVI classification: 7 classes
-            def classify_ndvi(masked_image): # better used an masked image to avoid water bodies obstracting the result
+            def classify_ndvi(masked_image): # better use a masked image to avoid water bodies obstracting the result as possible
                 ndvi_classified = ee.Image(masked_image) \
                 .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
                 .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
