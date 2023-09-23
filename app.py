@@ -240,7 +240,7 @@ def main():
         
         ## Accessibility: Color palette input
             st.info("Custom Color Palettes")
-            accessibility = st.selectbox("Accessibility: Colorblind-friendly Palettes", ["Normal", "Deuteranomaly", "Protanomaly", "Tritanomaly", "Achromatopsia"])
+            accessibility = st.selectbox("Accessibility: Colorblind-friendly Palettes", ["Normal", "Deuteranopia", "Protanopia", "Tritanopia", "Achromatopsia"])
 
             # Define default color palettes: used in map layers & map legend
             default_ndvi_palette = ["#ffffe5", "#f7fcb9", "#78c679", "#41ab5d", "#238443", "#005a32"]
@@ -250,13 +250,13 @@ def main():
             ndvi_palette = default_ndvi_palette.copy() 
             reclassified_ndvi_palette = default_reclassified_ndvi_palette.copy()
 
-            if accessibility == "Deuteranomaly":
+            if accessibility == "Deuteranopia":
                 ndvi_palette = ["#fffaa1","#f4ef8e","#9a5d67","#573f73","#372851","#191135"]
                 reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
-            elif accessibility == "Protanomaly":
+            elif accessibility == "Protanopia":
                 ndvi_palette = ["#a6f697","#7def75","#2dcebb","#1597ab","#0c677e","#002c47"]
                 reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
-            elif accessibility == "Tritanomaly":
+            elif accessibility == "Tritanopia":
                 ndvi_palette = ["#cdffd7","#a1fbb6","#6cb5c6","#3a77a5","#205080","#001752"]
                 reclassified_ndvi_palette = ["#ed4700","#ed8a00","#e1fabe","#99ff94","#87bede","#2e40cf","#0600bc"]
             elif accessibility == "Achromatopsia":

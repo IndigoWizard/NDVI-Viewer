@@ -1,6 +1,6 @@
 # NDVI-Viewer
 
-View and compare NDVI values of an area of interest between two time periods.
+Monitor Vegetation Health by Viewing & Comparing NDVI Values Through Time and Location with Sentinel-2 Satellite Images on The Fly!
 Streamlit App: https://ndvi-viewer.streamlit.app/
 
 ### User guide
@@ -9,6 +9,16 @@ Streamlit App: https://ndvi-viewer.streamlit.app/
 - Select Date Range: Pick the dates that you wish to compare NDVI values for. The app will calculate a 7-days range going back from each of the dates you picked.
 - Select Cloud Coverate Rate: Set the cloude coverage value for better quality images or for larger dataset in your image collection.
 - Additionally, for people with colorblind disability, it is possible to pick a color palette that's colorblind friendly with most common colorblindness types.
+
+### Preview:
+
+![](https://www.pixenli.com/image/MeljR-zA)
+
+### Note:
+
+The app is hosted on Streamlit Cloud for free and has resource limit (1 GB), sometimes the app may crash when exceeding the limit (too many operations).
+
+If the app crashes, it needs to be rebooted on dev end so DM me or rise an issue, no other options except deploying to a paid platform with padi resource increases.
 
 ### Project structure
 
