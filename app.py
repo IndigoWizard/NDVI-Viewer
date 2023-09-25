@@ -163,13 +163,24 @@ def upload_files_proc(upload_files):
         bytes_data = upload_file.read()
         geojson_data = json.loads(bytes_data)
 
-        for feature in geojson_data['features']:
-            coordinates = feature['geometry']['coordinates']
-            geometry = ee.Geometry.Polygon(coordinates)
-            geometry_aoi_list.append(geometry)
+        if 'features' in geojson_data and isinstance(geojson_data['features'], list):
+            # Handle GeoJSON files with a 'features' list
+            features = geojson_data['features']
+        elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
+            # Handle GeoJSON files with a 'geometries' list
+            features = [{'geometry': geo} for geo in geojson_data['geometries']]
+        else:
+            # handling cases of unexpected file format or missing 'features' or 'geometries'
+            continue
 
-            # Update the last uploaded centroid
-            last_uploaded_centroid = geometry.centroid(maxError=1).getInfo()['coordinates']
+        for feature in features:
+            if 'geometry' in feature and 'coordinates' in feature['geometry']:
+                coordinates = feature['geometry']['coordinates']
+                geometry = ee.Geometry.Polygon(coordinates) if feature['geometry']['type'] == 'Polygon' else ee.Geometry.MultiPolygon(coordinates)
+                geometry_aoi_list.append(geometry)
+
+                # Update the last uploaded centroid
+                last_uploaded_centroid = geometry.centroid(maxError=1).getInfo()['coordinates']
 
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
@@ -177,7 +188,6 @@ def upload_files_proc(upload_files):
         geometry_aoi = ee.Geometry.Point([27.98, 36.13])
 
     return geometry_aoi
-
 
 
 # Time input processing function
@@ -289,10 +299,10 @@ def main():
             if last_uploaded_centroid is not None:
                 latitude = last_uploaded_centroid[1]
                 longitude = last_uploaded_centroid[0]
-                m = folium.Map(location=[latitude, longitude], zoom_start=7, control_scale=True)
+                m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=7, control_scale=True)
             else:
                 # Default location if no file is uploaded
-                m = folium.Map(location=[36.45, 2.85], zoom_start=5, control_scale=True)
+                m = folium.Map(location=[36.45, 2.85], tiles=None, zoom_start=5, control_scale=True)
 
 
             ### BASEMAPS - START
