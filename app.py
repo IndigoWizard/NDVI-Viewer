@@ -23,7 +23,7 @@ st.markdown(
 """
 <style>
     /* Header*/
-    .css-1avcm0n{
+    .st-emotion-cache-1avcm0n{
         height: 1rem;
     }
     /* Smooth scrolling*/
@@ -31,12 +31,12 @@ st.markdown(
         scroll-behavior: smooth;
     }
     /* main app body with less padding*/
-    .css-z5fcl4 {
+    .st-emotion-cache-z5fcl4 {
         padding-block: 0;
     }
 
     /*Sidebar*/
-    .css-1544g2n {
+    .st-emotion-cache-10oheav {
         padding: 0 1rem;
     }
 
@@ -84,7 +84,7 @@ st.markdown(
 
     /* Upload info box */
     /*Upload button: dark theme*/
-    .css-1erivf3.e1b2p2ww15 {
+    .st-emotion-cache-1erivf3 {
         display: flex;
         flex-direction: column;
         align-items: inherit;
@@ -96,16 +96,43 @@ st.markdown(
         margin-inline: 0;
     }
     /*Upload button: light theme*/
-    .css-1gulkj5.e1b2p2ww15 {
+    .st-emotion-cache-1gulkj5 {
         display: flex;
         flex-direction: column;
         align-items: inherit;
         font-size: 14px;
     }
-    .css-u8hs99.e1b2p2ww14 {
+
+    .st-emotion-cache-u8hs99 {
         display: flex;
         flex-direction: row;
         margin-inline: 0;
+    }
+    /*Legend style*/
+
+    .ndvilegend {
+        transition: 0.2s ease-in-out;
+        border-radius: 5px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        background: rgba(0, 0, 0, 0.05);
+    }
+    .ndvilegend:hover {
+        transition: 0.3s ease-in-out;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.12);
+        cursor: pointer;
+    }
+    .reclassifiedndvi {
+        transition: 0.2s ease-in-out;
+        border-radius: 5px;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        background: rgba(0, 0, 0, 0.05);
+    }
+    .reclassifiedndvi:hover {
+        transition: 0.3s ease-in-out;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+        background: rgba(0, 0, 0, 0.12);
+        cursor: pointer;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -151,8 +178,6 @@ def satCollection(cloudRate, initialDate, updatedDate, aoi):
 # Upload function
 # Define a global variable to store the centroid of the last uploaded geometry
 last_uploaded_centroid = None
-
-# Upload function
 def upload_files_proc(upload_files):
     # A global variable to track the latest geojson uploaded
     global last_uploaded_centroid
@@ -217,8 +242,8 @@ def main():
                 - [Interpreting the Results](#interpreting-the-results)
                 - [Environmental Index](#using-an-environmental-index-ndvi)
                 - [Data](#data-sentinel-2-imagery-and-l2a-product)
-                - [About](#about)
                 - [Contribution](#contribute-to-the-app)
+                - [About](#about)
                 - [Credit](#credit)
             """)
     
@@ -299,10 +324,10 @@ def main():
             if last_uploaded_centroid is not None:
                 latitude = last_uploaded_centroid[1]
                 longitude = last_uploaded_centroid[0]
-                m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=7, control_scale=True)
+                m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=12, control_scale=True)
             else:
                 # Default location if no file is uploaded
-                m = folium.Map(location=[36.45, 2.85], tiles=None, zoom_start=5, control_scale=True)
+                m = folium.Map(location=[36.45, 10.85], tiles=None, zoom_start=4, control_scale=True)
 
 
             ### BASEMAPS - START
@@ -444,7 +469,7 @@ def main():
         with col3:            
             # Create an HTML legend for NDVI classes
             ndvi_legend_html = """
-                <div class="ndvilegend" style="border-radius: 5px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); background: rgba(0, 0, 0, 0.05);">
+                <div class="ndvilegend">
                     <h5>Raw NDVI</h5>
                     <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 1rem; width: 100%;">
                         <div style="width: 30px; height: 200px; background: linear-gradient({0},{1},{2},{3},{4},{5});"></div>
@@ -462,8 +487,8 @@ def main():
         with col4:            
             # Create an HTML legend for NDVI classes
             reclassified_ndvi_legend_html = """
-                <div class="reclassifiedndvi" style="border-radius: 5px; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); background: rgba(0, 0, 0, 0.05);">
-                    <h5>Reclassified NDVI</h5>
+                <div class="reclassifiedndvi">
+                    <h5>NDVI Classes</h5>
                     <ul style="list-style-type: none; padding: 0;">
                         <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {0};">&#9632;</span> Absent Vegetation. (Water/Clouds/Built-up/Rocks/Sand Surfaces..)</li>
                         <li style="margin: 0.2em 0px; padding: 0;"><span style="color: {1};">&#9632;</span> Bare Soil.</li>
@@ -529,17 +554,16 @@ def main():
 
     #### Miscs Info - END
 
-    #### About App - START
-    st.subheader("About:")
-    st.markdown("This project was first developed by me ([IndigoWizard](https://github.com/IndigoWizard)) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) as a submission to the **Environemental Data Challenge** of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://mlh.io/).<br> I continued developing the base project to make it a feature-complete app. Check the project's GitHub Repo here: [IndigoWizard/NDVI-Viewer](https://github.com/IndigoWizard/NDVI-Viewer)",  unsafe_allow_html=True)
-    st.image("https://www.pixenli.com/image/Hn1xkB-6")
-    #### About App - END
-
     #### Contributiuon - START
     st.header("Contribute to the App")
-    st.markdown("""
+    con1, con2 = st.columns(2)
+    con1.image("https://www.pixenli.com/image/SoL3iZMG")
+    con2.markdown("""
         Contributions are welcome from the community to help improve this app! Whether you're interested in fixing bugs 🐞, implementing a new feature 🌟, or enhancing the user experience 🪄, your contributions are valuable.
-
+                  
+        The project is listed under **Hacktoberfest** lalbel for those of you [Hacktoberfest](https://hacktoberfest.com/) enthusiasts! Since the reward for contributing 4 PRs is getting a tree planted in your name through [TreeNation](https://tree-nation.com/), I see it fits the theme of this project.
+        """)
+    st.markdown("""
         #### Ways to Contribute
 
         - **Report Issues**: If you come across any bugs, issues, or unexpected behavior, please report them in the [GitHub Issue Tracker](https://github.com/IndigoWizard/NDVI-Viewer/issues).
@@ -550,6 +574,12 @@ def main():
     """)
 
     #### Contributiuon - START
+
+    #### About App - START
+    st.subheader("About:")
+    st.markdown("This project was first developed by me ([IndigoWizard](https://github.com/IndigoWizard)) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) as a submission to the **Environemental Data Challenge** of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://mlh.io/).<br> I continued developing the base project to make it a feature-complete app. Check the project's GitHub Repo here: [IndigoWizard/NDVI-Viewer](https://github.com/IndigoWizard/NDVI-Viewer)",  unsafe_allow_html=True)
+    st.image("https://www.pixenli.com/image/Hn1xkB-6")
+    #### About App - END
 
     #### Credit - START
     st.subheader("Credit:")
