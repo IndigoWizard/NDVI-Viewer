@@ -40,4 +40,6 @@ This project was first developed as a submission to the Environemental Data Chal
 
 ### Credit
 
-The app was developped by [IndigoWizard](https://github.com/IndigoWizard) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) using; Streamlit, Google Earth Engine Python API, geemap, Folium. Agriculture icons created by <a href="https://www.flaticon.com/free-icons/agriculture" title="agriculture icons">dreamicons - Flaticon</a>
+The app was developped by [IndigoWizard](https://github.com/IndigoWizard) using; Streamlit, Google Earth Engine Python API, geemap, Folium. Agriculture icons created by <a href="https://www.flaticon.com/free-icons/agriculture" title="agriculture icons">dreamicons - Flaticon</a>
+
+**Contributors**: [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan)
