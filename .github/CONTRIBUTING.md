@@ -10,7 +10,7 @@ All contribution is welcome (_adding features✨, bug fix🔧, bug report🐛, d
 - Open a new issue stating the subject of your upcoming contribution if no already existing open issue is related to the subject.
 - If it's a **one-time issue**, ask a maintainer to assign you to the issue before starting to work on it.
 - Always make sure your own fork of the repo is up to date (sync) with the original repo.
-
+- Updating the `Streamlit` package changes the class names of elements > Requires updating CSS class names.
 ### Issues
 
 - Issues are labbeled to make them easier for contributors/mantainers to identify.
@@ -19,7 +19,7 @@ All contribution is welcome (_adding features✨, bug fix🔧, bug report🐛, d
 
 ### Branches
 
-I'm using integrated GitFfow for this project, so the setup is:
+I'm using integrated GitFlow for this project, so the setup is:
 
 **Branches:**
 - Master = streamlit-app
