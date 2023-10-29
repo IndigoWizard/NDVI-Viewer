@@ -302,11 +302,15 @@ def main():
         ## Time range input
         with c1:
             col1, col2 = st.columns(2)
+            
+            today = datetime.today()
+            delay = today - timedelta(days=2)
+
             col1.warning("Initial NDVI Date 📅")
-            initial_date = col1.date_input("initial", label_visibility="collapsed")
+            initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
 
             col2.success("Updated NDVI Date 📅")
-            updated_date = col2.date_input("updated", label_visibility="collapsed")
+            updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
 
             time_range = 7
             # Process initial date
