@@ -302,12 +302,19 @@ def main():
         ## Time range input
         with c1:
             col1, col2 = st.columns(2)
+            
+            # Creating a 2 days delay for the date_input placeholder to be sure there are satellite images in the dataset on app start
+            today = datetime.today()
+            delay = today - timedelta(days=2)
+
+            # Date input widgets
             col1.warning("Initial NDVI Date 📅")
-            initial_date = col1.date_input("initial", label_visibility="collapsed")
+            initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
 
             col2.success("Updated NDVI Date 📅")
-            updated_date = col2.date_input("updated", label_visibility="collapsed")
+            updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
 
+            # Setting up the time range variable for an image collection
             time_range = 7
             # Process initial date
             str_initial_start_date, str_initial_end_date = date_input_proc(initial_date, time_range)
