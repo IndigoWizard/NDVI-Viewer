@@ -257,70 +257,71 @@ def main():
         st.markdown("**Monitor Vegetation Health by Viewing & Comparing NDVI Values Through Time and Location with Sentinel-2 Satellite Images on The Fly!**")
     
     # columns for input - map
-    c1, c2 = st.columns([3, 1])
-    #### User input section - START
-    
-    with st.container():
-        with c2:
-        ## Cloud coverage input
-            st.info("Cloud Coverage 🌥️")
-            cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=75 , label_visibility="collapsed")
-
-        ## File upload
-            # User input GeoJSON file
-            st.info("Upload Area Of Interest file:")
-            upload_files = st.file_uploader("Crete a GeoJSON file at: [geojson.io](https://geojson.io/)", accept_multiple_files=True)
-            # calling upload files function
-            geometry_aoi = upload_files_proc(upload_files)
+    with st.form("input_form"):
+        c1, c2 = st.columns([3, 1])
+        #### User input section - START
         
-        ## Accessibility: Color palette input
-            st.info("Custom Color Palettes")
-            accessibility = st.selectbox("Accessibility: Colorblind-friendly Palettes", ["Normal", "Deuteranopia", "Protanopia", "Tritanopia", "Achromatopsia"])
+        with st.container():
+            with c2:
+            ## Cloud coverage input
+                st.info("Cloud Coverage 🌥️")
+                cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=85 , label_visibility="collapsed")
 
-            # Define default color palettes: used in map layers & map legend
-            default_ndvi_palette = ["#ffffe5", "#f7fcb9", "#78c679", "#41ab5d", "#238443", "#005a32"]
-            default_reclassified_ndvi_palette = ["#a50026","#ed5e3d","#f9f7ae","#f4ff78","#9ed569","#229b51","#006837"]
+            ## File upload
+                # User input GeoJSON file
+                st.info("Upload Area Of Interest file:")
+                upload_files = st.file_uploader("Crete a GeoJSON file at: [geojson.io](https://geojson.io/)", accept_multiple_files=True)
+                # calling upload files function
+                geometry_aoi = upload_files_proc(upload_files)
             
-            # a copy of default colors that can be reaffected
-            ndvi_palette = default_ndvi_palette.copy() 
-            reclassified_ndvi_palette = default_reclassified_ndvi_palette.copy()
+            ## Accessibility: Color palette input
+                st.info("Custom Color Palettes")
+                accessibility = st.selectbox("Accessibility: Colorblind-friendly Palettes", ["Normal", "Deuteranopia", "Protanopia", "Tritanopia", "Achromatopsia"])
 
-            if accessibility == "Deuteranopia":
-                ndvi_palette = ["#fffaa1","#f4ef8e","#9a5d67","#573f73","#372851","#191135"]
-                reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
-            elif accessibility == "Protanopia":
-                ndvi_palette = ["#a6f697","#7def75","#2dcebb","#1597ab","#0c677e","#002c47"]
-                reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
-            elif accessibility == "Tritanopia":
-                ndvi_palette = ["#cdffd7","#a1fbb6","#6cb5c6","#3a77a5","#205080","#001752"]
-                reclassified_ndvi_palette = ["#ed4700","#ed8a00","#e1fabe","#99ff94","#87bede","#2e40cf","#0600bc"]
-            elif accessibility == "Achromatopsia":
-                ndvi_palette = ["#407de0", "#2763da", "#394388", "#272c66", "#16194f", "#010034"]
-                reclassified_ndvi_palette = ["#004f3d", "#338796", "#66a4f5", "#3683ff", "#3d50ca", "#421c7f", "#290058"]
+                # Define default color palettes: used in map layers & map legend
+                default_ndvi_palette = ["#ffffe5", "#f7fcb9", "#78c679", "#41ab5d", "#238443", "#005a32"]
+                default_reclassified_ndvi_palette = ["#a50026","#ed5e3d","#f9f7ae","#f4ff78","#9ed569","#229b51","#006837"]
+                
+                # a copy of default colors that can be reaffected
+                ndvi_palette = default_ndvi_palette.copy() 
+                reclassified_ndvi_palette = default_reclassified_ndvi_palette.copy()
 
-    with st.container():
-        ## Time range input
-        with c1:
-            col1, col2 = st.columns(2)
-            
-            # Creating a 2 days delay for the date_input placeholder to be sure there are satellite images in the dataset on app start
-            today = datetime.today()
-            delay = today - timedelta(days=2)
+                if accessibility == "Deuteranopia":
+                    ndvi_palette = ["#fffaa1","#f4ef8e","#9a5d67","#573f73","#372851","#191135"]
+                    reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
+                elif accessibility == "Protanopia":
+                    ndvi_palette = ["#a6f697","#7def75","#2dcebb","#1597ab","#0c677e","#002c47"]
+                    reclassified_ndvi_palette = ["#95a600","#92ed3e","#affac5","#78ffb0","#69d6c6","#22459c","#000e69"]
+                elif accessibility == "Tritanopia":
+                    ndvi_palette = ["#cdffd7","#a1fbb6","#6cb5c6","#3a77a5","#205080","#001752"]
+                    reclassified_ndvi_palette = ["#ed4700","#ed8a00","#e1fabe","#99ff94","#87bede","#2e40cf","#0600bc"]
+                elif accessibility == "Achromatopsia":
+                    ndvi_palette = ["#407de0", "#2763da", "#394388", "#272c66", "#16194f", "#010034"]
+                    reclassified_ndvi_palette = ["#004f3d", "#338796", "#66a4f5", "#3683ff", "#3d50ca", "#421c7f", "#290058"]
 
-            # Date input widgets
-            col1.warning("Initial NDVI Date 📅")
-            initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
+        with st.container():
+            ## Time range input
+            with c1:
+                col1, col2 = st.columns(2)
+                
+                # Creating a 2 days delay for the date_input placeholder to be sure there are satellite images in the dataset on app start
+                today = datetime.today()
+                delay = today - timedelta(days=2)
 
-            col2.success("Updated NDVI Date 📅")
-            updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
+                # Date input widgets
+                col1.warning("Initial NDVI Date 📅")
+                initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
 
-            # Setting up the time range variable for an image collection
-            time_range = 7
-            # Process initial date
-            str_initial_start_date, str_initial_end_date = date_input_proc(initial_date, time_range)
+                col2.success("Updated NDVI Date 📅")
+                updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
 
-            # Process updated date
-            str_updated_start_date, str_updated_end_date = date_input_proc(updated_date, time_range)
+                # Setting up the time range variable for an image collection
+                time_range = 7
+                # Process initial date
+                str_initial_start_date, str_initial_end_date = date_input_proc(initial_date, time_range)
+
+                # Process updated date
+                str_updated_start_date, str_updated_end_date = date_input_proc(updated_date, time_range)
     
     #### User input section - END
 
@@ -345,19 +346,6 @@ def main():
             # CartoDB Dark Matter basemap
             b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap')
             b1.add_to(m)
-
-            ## WMS tiles basemaps
-            # OSM CyclOSM basemap 
-            # b2 = WmsTileLayer(
-            #     url=('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'),
-            #     layers=None,
-            #     name='Topography Basemap', # layer name to display on layer panel
-            #     attr='Topography Map',
-            #     show=False
-            # )
-            # b2.add_to(m)
-            ### BASEMAPS - END
-            #### Map section - END
 
             #### Satellite imagery Processing Section - START
             ## Defining and clipping image collections for both dates:
@@ -464,7 +452,13 @@ def main():
             # Folium Map Layer Control: we can see and interact with map layers
             folium.LayerControl(collapsed=True).add_to(m)
             # Display the map
-            folium_static(m)
+        submitted = c2.form_submit_button("Generate map")
+        if submitted:
+            with c1:
+                folium_static(m)
+        else:
+            with c1:
+                folium_static(m)
 
     #### Map result display - END
 
