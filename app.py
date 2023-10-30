@@ -134,6 +134,11 @@ st.markdown(
         background: rgba(0, 0, 0, 0.12);
         cursor: pointer;
     }
+    
+    /*Form submit button: generate map*/
+    button.st-emotion-cache-19rxjzo:nth-child(1) {
+        width: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
 
