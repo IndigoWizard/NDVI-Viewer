@@ -346,10 +346,10 @@ def main():
             ### BASEMAPS - START
             ## Primary basemaps
             # OSM
-            b0 = folium.TileLayer('Open Street Map', name="Open Street Map")
+            b0 = folium.TileLayer('Open Street Map', name='Open Street Map', attr='OSM')
             b0.add_to(m)
             # CartoDB Dark Matter basemap
-            b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap')
+            b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap', attr='CartoDB')
             b1.add_to(m)
 
             #### Satellite imagery Processing Section - START
