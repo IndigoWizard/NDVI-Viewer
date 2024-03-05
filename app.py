@@ -1,6 +1,7 @@
 import streamlit as st
 import ee
-import geemap
+from ee import oauth
+from google.oauth2 import service_account
 import folium
 from folium import WmsTileLayer
 from streamlit_folium import folium_static
@@ -147,8 +148,20 @@ st.markdown(
 #ee.Initialize()
 # geemap auth + initialization for cloud deployment
 @st.cache_data(persist=True)
-def ee_authenticate(token_name="EARTHENGINE_TOKEN"):
-    geemap.ee_initialize(token_name=token_name)
+def ee_authenticate():
+    # Check for json key in Streamlit Secrets
+    if "json_key" in st.secrets:
+        json_creds = st.secrets["json_key"]
+        service_account_info = json.loads(json_creds)
+        # Catching eventual email related error
+        if "client_email" not in service_account_info:
+            raise ValueError("Service account email address missing in json key")
+        creds = service_account.Credentials.from_service_account_info(service_account_info, scopes=oauth.SCOPES)
+        # Initializing gee for each run of the app
+        ee.Initialize(creds)
+    else:
+        # Fallback to normal init method if no json key/st secrets available. (local machine)
+        ee.Initialize()
 
 # Earth Engine drawing method setup
 def add_ee_layer(self, ee_image_object, vis_params, name):
@@ -232,7 +245,7 @@ def date_input_proc(input_date, time_range):
 # Main function to run the Streamlit app
 def main():
     # initiate gee 
-    ee_authenticate(token_name="EARTHENGINE_TOKEN")
+    ee_authenticate()
 
     # sidebar
     with st.sidebar:
@@ -346,7 +359,7 @@ def main():
             ### BASEMAPS - START
             ## Primary basemaps
             # OSM
-            b0 = folium.TileLayer('Open Street Map', name='Open Street Map', attr='OSM')
+            b0 = folium.TileLayer('OpenStreetMap', name='Open Street Map', attr='OSM')
             b0.add_to(m)
             # CartoDB Dark Matter basemap
             b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap', attr='CartoDB')
