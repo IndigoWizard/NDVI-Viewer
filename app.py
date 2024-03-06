@@ -34,10 +34,11 @@ st.markdown(
     /* main app body with less padding*/
     .st-emotion-cache-z5fcl4 {
         padding-block: 0;
+        position: relative;
     }
 
     /*Sidebar*/
-    .st-emotion-cache-10oheav {
+    .st-emotion-cache-16txtl3 {
         padding: 0 1rem;
     }
 
@@ -144,9 +145,9 @@ st.markdown(
 """, unsafe_allow_html=True)
 
 # Initializing the Earth Engine library
-# Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment > use geemap init+auth bellow)
+# Use ee.Initialize() only on local machine! Comment back before deployement (Unusable on deployment)
 #ee.Initialize()
-# geemap auth + initialization for cloud deployment
+# GEE Servuce Account Auth+init for cloud deployment
 @st.cache_data(persist=True)
 def ee_authenticate():
     # Check for json key in Streamlit Secrets
