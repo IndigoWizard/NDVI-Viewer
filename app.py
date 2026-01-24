@@ -284,7 +284,7 @@ def main():
             with c2:
             ## Cloud coverage input
                 st.info("Cloud Coverage 🌥️")
-                cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=85 , label_visibility="collapsed")
+                cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=100 , label_visibility="collapsed")
 
             ## File upload
                 # User input GeoJSON file
@@ -329,10 +329,10 @@ def main():
 
                 # Date input widgets
                 col1.warning("Initial NDVI Date 📅")
-                initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
+                initial_date = col1.date_input("initial", datetime(2026, 1, 12), label_visibility="collapsed")
 
                 col2.success("Updated NDVI Date 📅")
-                updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
+                updated_date = col2.date_input("updated", datetime(2026, 1, 12), label_visibility="collapsed")
 
                 # Setting up the time range variable for an image collection
                 time_range = 7
