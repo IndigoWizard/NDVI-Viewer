@@ -1,10 +1,16 @@
+"""
+Original Project Author: IndigoWizard, August 6, 2023.
+Project Name: NDVI Viewer
+"""
 import streamlit as st
 import ee
 from ee import oauth
 from google.oauth2 import service_account
 import folium
 from folium import WmsTileLayer
-from streamlit_folium import folium_static
+from streamlit_folium import folium_static, st_folium
+from branca.element import Template, MacroElement, Figure, Element
+from folium.utilities import escape_backticks
 from datetime import datetime, timedelta
 import json
 
@@ -16,40 +22,90 @@ st.set_page_config(
     menu_items={
     'Get help': "https://github.com/IndigoWizard/NDVI-Viewer",
     'Report a bug': "https://github.com/IndigoWizard/NDVI-Viewer/issues",
-    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis"
+    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis. Give proper credit when using or forking the open source projet or its code/piece of code."
     }
 )
 
+### CSS STYLING 
 st.markdown(
 """
 <style>
     /* Header*/
-    .st-emotion-cache-1avcm0n{
+    /* Dark theme version */
+    .st-emotion-cache-h4xjwg, .st-emotion-cache-12fmjuu {
         height: 1rem;
+        background: none;
     }
-    /* Smooth scrolling*/
-    .main {
+    /*Header banner*/
+    .st-emotion-cache-ropwps.egexzqm2 h1#wildfire-burn-severity-analysis {
+        font-size: 1.75rem;
+    }
+
+    /*Main: Smooth scrolling*/
+    .stMain.st-emotion-cache-bm2z3a.eht7o1d1 {
         scroll-behavior: smooth;
     }
+    
     /* main app body with less padding*/
-    .st-emotion-cache-z5fcl4 {
-        padding-block: 0;
-        position: relative;
+    .st-emotion-cache-t1wise.eht7o1d4 {
+        padding: 0.2rem 2rem;
     }
 
-    /*Sidebar*/
-    .st-emotion-cache-16txtl3 {
-        padding: 0 1rem;
+    /* main app body with less padding in different screen size*/
+    @media (min-width: calc(736px + 8rem)) {
+        .st-emotion-cache-t1wise {
+            padding: 0.2rem 2rem;
+        }
     }
 
-    /*Sidebar : inside container*/
+    /* ******* Sidebar ******* */
+    /* Main container */
+    /*Dark theme - Light theme class names*/
+    .stSidebar.st-emotion-cache-1wqrzgl.e1c29vlm0, .stSidebar.st-emotion-cache-vmpjyt.e1c29vlm0 {
+        min-width: 280px;
+        max-width: fit-content;
+    }
+
+    /*Light theme sidbar background color*/
+    .stSidebar.st-emotion-cache-vmpjyt, .stSidebar.st-emotion-cache-wgfafi.e1c29vlm0 {
+        background-color: rgb(38, 39, 48);
+        color: #fafafa;
+    }
+    /*sidebar light theme mobile view*/
+
+    @media (max-width: 576px) {
+        .stSidebar.st-emotion-cache-g8bi16.e1c29vlm0 {
+            background-color: rgb(38, 39, 48);
+            color: #fafafa;
+        }
+        .stVerticalBlock.st-emotion-cache-10e86g4.e6rk8up3, .stVerticalBlock.st-emotion-cache-1vn87qs.e6rk8up3 {
+            gap: 1.6rem;
+        }
+    }
+
+
+    /*Sidebar header*/
+    .st-emotion-cache-kgpedg {
+        padding: 0;
+    }
+    .st-emotion-cache-1mi2ry5.eczjsme6 {
+        height: 0;
+    }
+
+    /* Logo */
+    .st-emotion-cache-1kyxreq.e115fcil2 {
+        justify-content: center;
+    }
+
+    /* Sidebar : inside container */
     .css-ge7e53 {
         width: fit-content;
     }
 
     /*Sidebar : image*/
-    .css-1kyxreq {
-        display: block !important;
+    .st-emotion-cache-vew1uq.e6rk8up1 {
+        display: flex;
+        justify-content: center;
     }
 
     /*Sidebar : Navigation list*/
@@ -84,63 +140,137 @@ st.markdown(
         gap: 1rem;
     }
 
-    /* Upload info box */
-    /*Upload button: dark theme*/
-    .st-emotion-cache-1erivf3 {
-        display: flex;
-        flex-direction: column;
-        align-items: inherit;
-        font-size: 14px;
-    }
-    .css-u8hs99.eqdbnj014 {
+    /*Socials flex properties: dark & light theme*/
+    .st-emotion-cache-1espb9k p, .st-emotion-cache-1mw54nq p {
         display: flex;
         flex-direction: row;
-        margin-inline: 0;
+        justify-content: start;
+        gap: 0.8rem;
+        padding-inline: 10px;
     }
-    /*Upload button: light theme*/
-    .st-emotion-cache-1gulkj5 {
+    
+    /* Linkedin logo*/
+    .st-emotion-cache-1espb9k.egexzqm0 p a img, .st-emotion-cache-1mw54nq.egexzqm0 p a img {
+        width: 32px;
+    }
+
+    /*GitHub logo:  Dark Theme - Light Theme*/
+    .st-emotion-cache-14j6x93:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p:nth-child(1) > a:nth-child(2) > img:nth-child(1) {
+        background-color: #26273040;
+        border-radius: 50%;
+    }
+    /*GitHub logo:  Dark Theme - Light Theme - Mobile version*/
+    div.st-emotion-cache-vew1uq:nth-child(6) > div:nth-child(1) > div:nth-child(1) > p:nth-child(1) > a:nth-child(2) > img:nth-child(1) {
+        background-color: #26273040;
+        border-radius: 50%;
+    }
+
+    /*Main body Title*/
+    .st-emotion-cache-ropwps.egexzqm2 h1#wildfire-burn-severity-analysis, .st-emotion-cache-18netey.egexzqm2 h1#wildfire-burn-severity-analysis {
+        font-size: 2rem;
+        padding: 1.8rem 0 0.5rem;
+    }
+    
+    /* ******* Upload Section ******* */
+    /* ***** Upload info box */
+    /* Light theme version */
+    .st-emotion-cache-1gulkj5.e1blfcsg0 {
+        background-color: rgb(215, 210, 225);
+        color: rgb(40, 40, 55);
         display: flex;
         flex-direction: column;
         align-items: inherit;
         font-size: 14px;
     }
 
-    .st-emotion-cache-u8hs99 {
+    /* ***** Upload SVG: Mobile view */
+    @media (max-width: 576px) {
+        /* Dark theme version*/
+        .st-emotion-cache-wn8ljn.e1b2p2ww13 {
+            display: unset;
+        }
+
+        /* Light theme version*/
+        .st-emotion-cache-nwtri.e1b2p2ww13 {
+            display: unset;
+        }
+    }
+    
+    /* ***** Upload button: dark theme*/
+    .st-emotion-cache-1erivf3.e1blfcsg0 {
+        display: flex;
+        flex-direction: column;
+        align-items: inherit;
+        font-size: 14px;
+    }
+    .st-emotion-cache-19rxjzo.ef3psqc12 {
         display: flex;
         flex-direction: row;
         margin-inline: 0;
     }
-    /*Legend style*/
+    
+    /* ***** Upload button: light theme*/
+    .st-emotion-cache-1gulkj5.e1b2p2ww15 {
+        display: flex;
+        flex-direction: column;
+        align-items: inherit;
+        font-size: 14px;
+    }
 
-    .ndvilegend {
+    .st-emotion-cache-7ym5gk.ef3psqc12 {
+        display: flex;
+        flex-direction: row;
+        margin-inline: 0;
+        background: rgba(0, 3, 172, 0.15);
+    }
+
+    /* ******* Form Submit ******* */
+    /* ***** Generate Map */
+    /* Dark theme version */
+    .st-emotion-cache-19rxjzo.ef3psqc7 {
+        width: 100%;
+    }
+    /* Light Theme Version */
+    .st-emotion-cache-7ym5gk.ef3psqc7 {
+        width: 100%;
+        background: rgba(0, 3, 172, 0.25);
+    }
+
+    /* Buttons */
+    /* Light theme verison; hober effect */
+    .st-emotion-cache-7ym5gk:hover {
+        border-color: rgb(255, 0, 110);
+        color: rgb(255, 0, 110);
+    }
+
+    /* ******* Legend style ******* */
+
+    .ndwilegend {
         transition: 0.2s ease-in-out;
         border-radius: 5px;
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
         background: rgba(0, 0, 0, 0.05);
     }
-    .ndvilegend:hover {
+    .ndwilegend:hover {
         transition: 0.3s ease-in-out;
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
         background: rgba(0, 0, 0, 0.12);
         cursor: pointer;
     }
-    .reclassifiedndvi {
+    .reclassifieddNBR {
         transition: 0.2s ease-in-out;
         border-radius: 5px;
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
         background: rgba(0, 0, 0, 0.05);
     }
-    .reclassifiedndvi:hover {
+    .reclassifieddNBR:hover {
         transition: 0.3s ease-in-out;
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
         background: rgba(0, 0, 0, 0.12);
         cursor: pointer;
     }
     
-    /*Form submit button: generate map*/
-    button.st-emotion-cache-19rxjzo:nth-child(1) {
-        width: 100%;
-    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -284,7 +414,7 @@ def main():
             with c2:
             ## Cloud coverage input
                 st.info("Cloud Coverage 🌥️")
-                cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=85 , label_visibility="collapsed")
+                cloud_pixel_percentage = st.slider(label="cloud pixel rate", min_value=5, max_value=100, step=5, value=100 , label_visibility="collapsed")
 
             ## File upload
                 # User input GeoJSON file
@@ -329,10 +459,10 @@ def main():
 
                 # Date input widgets
                 col1.warning("Initial NDVI Date 📅")
-                initial_date = col1.date_input("initial", value=delay, label_visibility="collapsed")
+                initial_date = col1.date_input("initial", datetime(2026, 1, 12), label_visibility="collapsed")
 
                 col2.success("Updated NDVI Date 📅")
-                updated_date = col2.date_input("updated", value=delay, label_visibility="collapsed")
+                updated_date = col2.date_input("updated", datetime(2026, 1, 12), label_visibility="collapsed")
 
                 # Setting up the time range variable for an image collection
                 time_range = 7
@@ -351,10 +481,10 @@ def main():
             if last_uploaded_centroid is not None:
                 latitude = last_uploaded_centroid[1]
                 longitude = last_uploaded_centroid[0]
-                m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=12, control_scale=True)
+                m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=12, control_scale=True, attributionControl=0)
             else:
                 # Default location if no file is uploaded
-                m = folium.Map(location=[36.45, 10.85], tiles=None, zoom_start=4, control_scale=True)
+                m = folium.Map(location=[36.45, 10.85], tiles=None, zoom_start=4, control_scale=True, attributionControl=0)
 
 
             ### BASEMAPS - START
@@ -365,6 +495,94 @@ def main():
             # CartoDB Dark Matter basemap
             b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap', attr='CartoDB')
             b1.add_to(m)
+
+            # custom attribution textbox
+            class MyCustomAttribution(MacroElement):
+                _template = Template("""
+                    {% macro script(this, kwargs) %}
+
+                    L.Control.MyCustomAttribution = L.Control.extend({
+                        onAdd: function(map) {
+                            let div = L.DomUtil.create('div', 'map-credit-box');
+                            div.innerHTML = `{{ this.injectedHtml }}`;
+                            L.DomEvent.disableClickPropagation(div);
+                            return div;
+                        }
+                    });
+
+                    L.control.myCustomAttribution = function(opts) {
+                        return new L.Control.MyCustomAttribution(opts);
+                    };
+
+                    L.control.myCustomAttribution({
+                        position: "{{ this.position }}"
+                    }).addTo({{ this._parent.get_name() }});
+
+                    {% endmacro %}
+                """)
+
+                def __init__(self, injectedHtml, position="bottomright"):
+                    super().__init__()
+                    self.injectedHtml = escape_backticks(injectedHtml)
+                    self.position = position
+
+
+            credit_html = """
+            🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
+            """
+
+            credit_css = """
+                <style>
+                    .map-credit-box {
+                        bottom: 0;
+                        right: 0;
+                        z-index: 9999;
+                        background: rgba(255, 255, 255, 0.85);
+                        color: #333;
+                        padding: 2px 2px;
+                        border-radius: 4px;
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                        font-family: "Segoe UI", "Noto Sans", sans-serif;
+                        line-height: 1.2;
+                        max-width: 90vw;
+                        white-space: normal;
+                    }
+
+                    .map-credit-box a {
+                        color: #0078A8;
+                        text-decoration: none;
+                    }
+
+                    /* Mobile adjustments */
+                    @media (max-width: 610px) {
+                        .map-credit-box {
+                        font-size: 0.8rem;
+                        max-width: 100%;
+                        right: 0;
+                        }
+                        .leaflet-bottom .leaflet-control-scale{
+                        margin-bottom: 30px;
+                        }
+                    }
+                    @media (max-width: 550px) {
+                        .map-credit-box {
+                        max-width: 100%;
+                        text-align: right;
+                        }
+                        .leaflet-bottom .leaflet-control-scale{
+                        margin-bottom: 45px;
+                        }
+                    }
+                </style>
+            """
+
+            # add CSS correctly
+            m.get_root().header.add_child(Element(credit_css))
+
+            # add attribution control
+            MyCustomAttribution(credit_html, position="bottomright").add_to(m)
+
 
             #### Satellite imagery Processing Section - START
             ## Defining and clipping image collections for both dates:
@@ -468,16 +686,20 @@ def main():
             #### Layers section - END
 
             #### Map result display - START
+            
+            # full screen plugin
+            folium.plugins.Fullscreen(position="bottomright", title="Expand", title_cancel="Exit", force_separate_button=True).add_to(m)
             # Folium Map Layer Control: we can see and interact with map layers
             folium.LayerControl(collapsed=True).add_to(m)
+
             # Display the map
         submitted = c2.form_submit_button("Generate map")
         if submitted:
             with c1:
-                folium_static(m)
+                st_folium(m, use_container_width=True, height="500")
         else:
             with c1:
-                folium_static(m)
+                st_folium(m, use_container_width=True, height="500")
 
     #### Map result display - END
 
@@ -527,84 +749,85 @@ def main():
     #### Legend - END
 
     #### Miscs Infos - START
-    st.subheader("Information")
+    with st.container():
+        st.subheader("Information")
 
-    ## How It Works
-    st.write("#### Process workflow: AOI, Date Range, and Classification")
-    st.write("This app provides a simple interface to explore NDVI changes over time for a specified Area of Interest (AOI). Here's how it works:")
+        ## How It Works
+        st.write("#### Process workflow: AOI, Date Range, and Classification")
+        st.write("This app provides a simple interface to explore NDVI changes over time for a specified Area of Interest (AOI). Here's how it works:")
 
-    st.write("1. **Upload GeoJSON AOI:** Start by uploading a GeoJSON file that outlines your Area of Interest. This defines the region where NDVI analysis will be performed. You can create any polygon-shaped area of interest at [geojson.io](https://geojson.io).")
-    st.write("2. **Select Date Range:** Choose a date, this input triggers the app to gather images from a **7-days range** leading to that date. These images blend into a mosaic that highlights vegetation patterns while minimizing disruptions like clouds. ")
-    st.write("3. **Select Cloud Coverate Rate:** Choose a value for cloud coverage, this input triggers the app to gather images with relevant value of clouds covering the images. A higher value will gather more images but may be of poor quality, lower cloud coverage value gathers clearer images, but may have less images in the collection.")
-    st.write("4. **Image Collection and Processing:** Once the date range is established, the app collects satellite images spanning that period. These images are then clipped to your chosen Area of Interest (AOI) and undergo processing to derive raw NDVI values using wavelength calculations. This method ensures that the resulting NDVI map accurately reflects the vegetation status within your specific region of interest.")
-    st.write("5. **NDVI Classification:** The raw NDVI results are classified into distinct vegetation classes. This classification provides a simplified visualization of vegetation density, aiding in interpretation.")
-    st.write("6. **Map Visualization:** The results are displayed on an interactive map, allowing you to explore NDVI patterns and changes within your AOI.")
+        st.write("1. **Upload GeoJSON AOI:** Start by uploading a GeoJSON file that outlines your Area of Interest. This defines the region where NDVI analysis will be performed. You can create any polygon-shaped area of interest at [geojson.io](https://geojson.io).")
+        st.write("2. **Select Date Range:** Choose a date, this input triggers the app to gather images from a **7-days range** leading to that date. These images blend into a mosaic that highlights vegetation patterns while minimizing disruptions like clouds. ")
+        st.write("3. **Select Cloud Coverate Rate:** Choose a value for cloud coverage, this input triggers the app to gather images with relevant value of clouds covering the images. A higher value will gather more images but may be of poor quality, lower cloud coverage value gathers clearer images, but may have less images in the collection.")
+        st.write("4. **Image Collection and Processing:** Once the date range is established, the app collects satellite images spanning that period. These images are then clipped to your chosen Area of Interest (AOI) and undergo processing to derive raw NDVI values using wavelength calculations. This method ensures that the resulting NDVI map accurately reflects the vegetation status within your specific region of interest.")
+        st.write("5. **NDVI Classification:** The raw NDVI results are classified into distinct vegetation classes. This classification provides a simplified visualization of vegetation density, aiding in interpretation.")
+        st.write("6. **Map Visualization:** The results are displayed on an interactive map, allowing you to explore NDVI patterns and changes within your AOI.")
 
-    st.write("This app is designed to provide an accessible tool for both technical and non-technical users to explore and interpret vegetation health and density changes.")
-    st.write("Keep in mind that while the NDVI map is a valuable tool, its interpretation requires consideration of various factors. Enjoy exploring the world of vegetation health and density!")
+        st.write("This app is designed to provide an accessible tool for both technical and non-technical users to explore and interpret vegetation health and density changes.")
+        st.write("Keep in mind that while the NDVI map is a valuable tool, its interpretation requires consideration of various factors. Enjoy exploring the world of vegetation health and density!")
 
-    # Results interpretation
-    st.write("#### Interpreting the Results")
-    st.write("When exploring the NDVI map, keep in mind:")
+        # Results interpretation
+        st.write("#### Interpreting the Results")
+        st.write("When exploring the NDVI map, keep in mind:")
 
-    st.write("- Clouds, atmospheric conditions, and water bodies can affect the map's appearance.")
-    st.write("- Satellite sensors have limitations in distinguishing surface types, leading to color variations.")
-    st.write("- NDVI values vary with seasons, growth stages, and land cover changes.")
-    st.write("- The map provides visual insights rather than precise representations.")
+        st.write("- Clouds, atmospheric conditions, and water bodies can affect the map's appearance.")
+        st.write("- Satellite sensors have limitations in distinguishing surface types, leading to color variations.")
+        st.write("- NDVI values vary with seasons, growth stages, and land cover changes.")
+        st.write("- The map provides visual insights rather than precise representations.")
 
-    st.write("Understanding these factors will help you interpret the results more effectively. This application aims to provide you with an informative visual aid for vegetation analysis.")
+        st.write("Understanding these factors will help you interpret the results more effectively. This application aims to provide you with an informative visual aid for vegetation analysis.")
 
-    ## NDVI/Environmental Index
-    st.write("#### Using an Environmental Index - NDVI:")
-    st.write("The [Normalized Difference Vegetation Index (NDVI)](https://eos.com/make-an-analysis/ndvi/) is an essential environmental index that provides insights into the health and density of vegetation. It is widely used in remote sensing and geospatial analysis to monitor changes in land cover, vegetation growth, and environmental conditions.")
+        ## NDVI/Environmental Index
+        st.write("#### Using an Environmental Index - NDVI:")
+        st.write("The [Normalized Difference Vegetation Index (NDVI)](https://eos.com/make-an-analysis/ndvi/) is an essential environmental index that provides insights into the health and density of vegetation. It is widely used in remote sensing and geospatial analysis to monitor changes in land cover, vegetation growth, and environmental conditions.")
 
-    st.write("NDVI is calculated using satellite imagery that captures both Near-Infrared **(NIR)** and Red **(R)** wavelengths. The formula is:")
-    st.latex(r'''
-    \text{NDVI} = \frac{\text{NIR} - \text{R}}{\text{NIR} + \text{R}}
-    ''')
+        st.write("NDVI is calculated using satellite imagery that captures both Near-Infrared **(NIR)** and Red **(R)** wavelengths. The formula is:")
+        st.latex(r'''
+        \text{NDVI} = \frac{\text{NIR} - \text{R}}{\text{NIR} + \text{R}}
+        ''')
 
-    st.write("NDVI values range from **[-1** to **1]**, with higher values indicating denser and healthier vegetation. Lower values represent non-vegetated surfaces like water bodies, bare soil, or built-up areas.")
+        st.write("NDVI values range from **[-1** to **1]**, with higher values indicating denser and healthier vegetation. Lower values represent non-vegetated surfaces like water bodies, bare soil, or built-up areas.")
 
-    ## Data
-    st.write("#### Data: Sentinel-2 Imagery and L2A Product")
-    st.write("This app utilizes **Sentinel-2 Level-2A atmospherically corrected Surface Reflectance images**. The [Sentinel-2 satellite constellation](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/applications) consists of twin satellites (Sentinel-2A and Sentinel-2B) that capture high-resolution multispectral imagery of the Earth's surface.")
+        ## Data
+        st.write("#### Data: Sentinel-2 Imagery and L2A Product")
+        st.write("This app utilizes **Sentinel-2 Level-2A atmospherically corrected Surface Reflectance images**. The [Sentinel-2 satellite constellation](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/applications) consists of twin satellites (Sentinel-2A and Sentinel-2B) that capture high-resolution multispectral imagery of the Earth's surface.")
 
-    st.write("The [Level-2A](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/product-types/level-2a) products have undergone atmospheric correction, enhancing the accuracy of surface reflectance values. These images are suitable for various land cover and vegetation analyses, including NDVI calculations.")
+        st.write("The [Level-2A](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/product-types/level-2a) products have undergone atmospheric correction, enhancing the accuracy of surface reflectance values. These images are suitable for various land cover and vegetation analyses, including NDVI calculations.")
 
 
-    #### Miscs Info - END
+        #### Miscs Info - END
 
-    #### Contributiuon - START
-    st.header("Contribute to the App")
-    con1, con2 = st.columns(2)
-    con1.image("https://www.pixenli.com/image/SoL3iZMG")
-    con2.markdown("""
-        Contributions are welcome from the community to help improve this app! Whether you're interested in fixing bugs 🐞, implementing a new feature 🌟, or enhancing the user experience 🪄, your contributions are valuable.
-                  
-        The project is listed under **Hacktoberfest** lalbel for those of you [Hacktoberfest](https://hacktoberfest.com/) enthusiasts! Since the reward for contributing 4 PRs is getting a tree planted in your name through [TreeNation](https://tree-nation.com/), I see it fits the theme of this project.
+        #### Contributiuon - START
+        st.header("Contribute to the App")
+        con1, con2 = st.columns(2)
+        con1.image("https://www.pixenli.com/image/SoL3iZMG")
+        con2.markdown("""
+            Contributions are welcome from the community to help improve this app! Whether you're interested in fixing bugs 🐞, implementing a new feature 🌟, or enhancing the user experience 🪄, your contributions are valuable.
+                    
+            The project is listed under **Hacktoberfest** lalbel for those of you [Hacktoberfest](https://hacktoberfest.com/) enthusiasts! Since the reward for contributing 4 PRs is getting a tree planted in your name through [TreeNation](https://tree-nation.com/), I see it fits the theme of this project.
+            """)
+        st.markdown("""
+            #### Ways to Contribute
+
+            - **Report Issues**: If you come across any bugs, issues, or unexpected behavior, please report them in the [GitHub Issue Tracker](https://github.com/IndigoWizard/NDVI-Viewer/issues).
+
+            - **Suggest Enhancements**: Have an idea to make the app better? Share your suggestions in the [GitHub Issue Tracker](https://github.com/IndigoWizard/NDVI-Viewer/issues).
+
+            - **Code Contributions**: If you're comfortable with coding, you can contribute by submitting pull requests against the `dev` branch of the [Project's GitHub repository](https://github.com/IndigoWizard/NDVI-Viewer/).
         """)
-    st.markdown("""
-        #### Ways to Contribute
 
-        - **Report Issues**: If you come across any bugs, issues, or unexpected behavior, please report them in the [GitHub Issue Tracker](https://github.com/IndigoWizard/NDVI-Viewer/issues).
+        #### Contributiuon - START
 
-        - **Suggest Enhancements**: Have an idea to make the app better? Share your suggestions in the [GitHub Issue Tracker](https://github.com/IndigoWizard/NDVI-Viewer/issues).
+        #### About App - START
+        st.subheader("About:")
+        st.markdown("This project was first developed by me ([IndigoWizard](https://github.com/IndigoWizard)) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) as a submission to the **Environemental Data Challenge** of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://mlh.io/).<br> I continued developing the base project to make it a feature-complete app. Check the project's GitHub Repo here: [IndigoWizard/NDVI-Viewer](https://github.com/IndigoWizard/NDVI-Viewer)",  unsafe_allow_html=True)
+        st.image("https://www.pixenli.com/image/Hn1xkB-6")
+        #### About App - END
 
-        - **Code Contributions**: If you're comfortable with coding, you can contribute by submitting pull requests against the `dev` branch of the [Project's GitHub repository](https://github.com/IndigoWizard/NDVI-Viewer/).
-    """)
-
-    #### Contributiuon - START
-
-    #### About App - START
-    st.subheader("About:")
-    st.markdown("This project was first developed by me ([IndigoWizard](https://github.com/IndigoWizard)) and [Emmarie-Ahtunan](https://github.com/Emmarie-Ahtunan) as a submission to the **Environemental Data Challenge** of [Global Hack Week: Data](https://ghw.mlh.io/) by [Major League Hacking](https://mlh.io/).<br> I continued developing the base project to make it a feature-complete app. Check the project's GitHub Repo here: [IndigoWizard/NDVI-Viewer](https://github.com/IndigoWizard/NDVI-Viewer)",  unsafe_allow_html=True)
-    st.image("https://www.pixenli.com/image/Hn1xkB-6")
-    #### About App - END
-
-    #### Credit - START
-    st.subheader("Credit:")
-    st.markdown("""The app was developped by [IndigoWizard](https://github.com/IndigoWizard) using; [Streamlit](https://streamlit.io/), [Google Earth Engine](https://github.com/google/earthengine-api) Python API, [geemap](https://github.com/gee-community/geemap), [Folium](https://github.com/python-visualization/folium). Agriculture icons created by <a href="https://www.flaticon.com/free-icons/agriculture" title="agriculture icons">dreamicons - Flaticon</a>""", unsafe_allow_html=True)
-    #### Credit - END
+        #### Credit - START
+        st.subheader("Credit:")
+        st.markdown("""The app was developped by [IndigoWizard](https://github.com/IndigoWizard) using; [Streamlit](https://streamlit.io/), [Google Earth Engine](https://github.com/google/earthengine-api) Python API, [Folium](https://github.com/python-visualization/folium). Agriculture icons created by <a href="https://www.flaticon.com/free-icons/agriculture" title="agriculture icons">dreamicons - Flaticon</a>""", unsafe_allow_html=True)
+        #### Credit - END
     
     ##### Custom Styling
     st.markdown(
@@ -613,11 +836,6 @@ def main():
         /*Map iframe*/
         iframe {
             width: 100%;
-        }
-        .css-1o9kxky.e1f1d6gn0 {
-            border: 2px solid #ffffff4d;
-            border-radius: 4px;
-            padding: 1rem;
         }
     </style>
     """, unsafe_allow_html=True)
