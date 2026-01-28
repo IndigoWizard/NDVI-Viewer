@@ -270,7 +270,14 @@ st.markdown(
         cursor: pointer;
     }
     
-
+    .stCustomComponentV1.st-emotion-cache-1tvzk6f.e1begtbc0 {
+        width: 100%;
+        height: 500px !important;
+        min-height: 500px !important;
+        max-height: 500px !important;
+        overflow: hidden !important;
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -484,16 +491,19 @@ def main():
                 m = folium.Map(location=[latitude, longitude], tiles=None, zoom_start=12, control_scale=True, attributionControl=0)
             else:
                 # Default location if no file is uploaded
-                m = folium.Map(location=[36.45, 10.85], tiles=None, zoom_start=4, control_scale=True, attributionControl=0)
-
+                m = folium.Map(location=[36.45, 10.85], tiles=None, zoom_start=5, control_scale=True, attributionControl=0)
 
             ### BASEMAPS - START
             ## Primary basemaps
             # OSM
             b0 = folium.TileLayer('OpenStreetMap', name='Open Street Map', attr='OSM')
             b0.add_to(m)
-            # CartoDB Dark Matter basemap
-            b1 = folium.TileLayer('cartodbdark_matter', name='Dark Basemap', attr='CartoDB')
+
+            # Mapbox
+            mapbox_api = st.secrets["mapbox_token"]
+            mapbox_url = f"https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_api}"
+
+            b1 = folium.TileLayer(tiles=mapbox_url, attr='Mapbox', name='Mapbox Dark', overlay=False, control=True, max_zoom=20, min_zoom=1 )
             b1.add_to(m)
 
             # custom attribution textbox
@@ -526,16 +536,11 @@ def main():
                     self.injectedHtml = escape_backticks(injectedHtml)
                     self.position = position
 
-
             credit_html = """
-            🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
-            """
-
-            credit_css = """
                 <style>
-                    .map-credit-box {
-                        bottom: 0;
-                        right: 0;
+                    .map-credit-box.leaflet-control {
+                        bottom: -10px;
+                        right: -10px;
                         z-index: 9999;
                         background: rgba(255, 255, 255, 0.85);
                         color: #333;
@@ -549,36 +554,56 @@ def main():
                         white-space: normal;
                     }
 
-                    .map-credit-box a {
+                    .map-credit-box.leaflet-control a {
                         color: #0078A8;
                         text-decoration: none;
                     }
+                    
+                    .leaflet-bottom .leaflet-control-scale{
+                        font-weight: 600;
+                        font-family: "Source Sans Pro", sans-serif;
+                        margin-bottom: 0;
+                    }
 
                     /* Mobile adjustments */
-                    @media (max-width: 610px) {
-                        .map-credit-box {
-                        font-size: 0.8rem;
-                        max-width: 100%;
-                        right: 0;
+
+                    @media (max-width: 825px) {
+                        .leaflet-bottom .leaflet-control-scale{
+                            margin-bottom: 25px;
+                        }
+                    }
+                    @media (max-width: 815px) {
+                        .map-credit-box.leaflet-control {
+                            max-width: 100%;
+                            width: 100%;
                         }
                         .leaflet-bottom .leaflet-control-scale{
-                        margin-bottom: 30px;
+                            margin-bottom: 45px;
+                        }
+                    }
+                    @media (max-width: 610px) {
+                        .map-credit-box.leaflet-control {
+                            font-size: 0.8rem;
+                            max-width: 100%;
+                            text-align: center;
+                        }
+                        .leaflet-bottom .leaflet-control-scale{
+                            margin-bottom: 45px;
                         }
                     }
                     @media (max-width: 550px) {
-                        .map-credit-box {
-                        max-width: 100%;
-                        text-align: right;
+                        .map-credit-box.leaflet-control {
+                            width: 100%;
+                            text-align: center;
                         }
                         .leaflet-bottom .leaflet-control-scale{
-                        margin-bottom: 45px;
+                            margin-bottom: 45px;
                         }
                     }
                 </style>
-            """
 
-            # add CSS correctly
-            m.get_root().header.add_child(Element(credit_css))
+            🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://www.mapbox.com/about/maps" target="_blank" rel="noopener noreferrer">Mapbox</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
+            """
 
             # add attribution control
             MyCustomAttribution(credit_html, position="bottomright").add_to(m)
@@ -790,9 +815,9 @@ def main():
 
         ## Data
         st.write("#### Data: Sentinel-2 Imagery and L2A Product")
-        st.write("This app utilizes **Sentinel-2 Level-2A atmospherically corrected Surface Reflectance images**. The [Sentinel-2 satellite constellation](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/applications) consists of twin satellites (Sentinel-2A and Sentinel-2B) that capture high-resolution multispectral imagery of the Earth's surface.")
+        st.write("This app utilizes **Sentinel-2 Level-2A atmospherically corrected Surface Reflectance images**. The [Sentinel-2 satellite constellation](https://sentiwiki.copernicus.eu/web/s2-applications) consists of twin satellites (Sentinel-2A and Sentinel-2B) that capture high-resolution multispectral imagery of the Earth's surface.")
 
-        st.write("The [Level-2A](https://sentinels.copernicus.eu/web/sentinel/user-guides/sentinel-2-msi/product-types/level-2a) products have undergone atmospheric correction, enhancing the accuracy of surface reflectance values. These images are suitable for various land cover and vegetation analyses, including NDVI calculations.")
+        st.write("The [Level-2A](https://sentiwiki.copernicus.eu/web/s2-products#S2Products-Level-2AProductsS2-Products-L2Atrue) products have undergone atmospheric correction, enhancing the accuracy of surface reflectance values. These images are suitable for various land cover and vegetation analyses, including NDVI calculations.")
 
 
         #### Miscs Info - END
@@ -829,17 +854,6 @@ def main():
         st.markdown("""The app was developped by [IndigoWizard](https://github.com/IndigoWizard) using; [Streamlit](https://streamlit.io/), [Google Earth Engine](https://github.com/google/earthengine-api) Python API, [Folium](https://github.com/python-visualization/folium). Agriculture icons created by <a href="https://www.flaticon.com/free-icons/agriculture" title="agriculture icons">dreamicons - Flaticon</a>""", unsafe_allow_html=True)
         #### Credit - END
     
-    ##### Custom Styling
-    st.markdown(
-    """
-    <style>
-        /*Map iframe*/
-        iframe {
-            width: 100%;
-        }
-    </style>
-    """, unsafe_allow_html=True)
- 
 
 # Run the app
 if __name__ == "__main__":
