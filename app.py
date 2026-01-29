@@ -7,12 +7,21 @@ import ee
 from ee import oauth
 from google.oauth2 import service_account
 import folium
-from folium import WmsTileLayer
 from streamlit_folium import folium_static, st_folium
 from branca.element import Template, MacroElement, Figure, Element
 from folium.utilities import escape_backticks
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
+import pandas as pd
+import geopandas as gpd
+import calendar
+import altair as alt
+import tempfile
+import zipfile
+import os
+import xml.etree.ElementTree as ET
+import fiona
+from shapely.geometry import shape, mapping
 
 st.set_page_config(
     page_title="NDVI Viewer",
@@ -22,7 +31,7 @@ st.set_page_config(
     menu_items={
     'Get help': "https://github.com/IndigoWizard/NDVI-Viewer",
     'Report a bug': "https://github.com/IndigoWizard/NDVI-Viewer/issues",
-    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis. Give proper credit when using or forking the open source projet or its code/piece of code."
+    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis. Give proper credit when using this app or forking the open source projet code/piece of code."
     }
 )
 
@@ -331,8 +340,265 @@ def satCollection(cloudRate, initialDate, updatedDate, aoi):
     collection = collection.map(clipCollection)
     return collection
 
-# Upload function
-# Define a global variable to store the centroid of the last uploaded geometry
+
+# File Parser: GeoPackage (`.gpkg`)
+def parse_geopackage(upload_file):
+
+    # prepare geometry
+    geometry_list = []
+    
+    with fiona.open(upload_file) as fu:
+        for feat in fu:
+            # Convert geometry to a Shapely geometry object
+            geom = shape(feat["geometry"])
+
+            # handle basic polygon
+            if geom.geom_type == "Polygon":
+                geometry_list.append(ee.Geometry.Polygon(list(geom.exterior.coords)))
+            
+            # handle multipolygon
+            elif geom.geom_type == "MultiPolygon":
+                coords = [list(poly.exterior.coords) for poly in geom.geoms]
+                geometry_list.append(ee.Geometry.MultiPolygon(coords))
+    
+    return geometry_list
+
+
+# File Parser: CSV
+# column name variations found in CSV datasets 
+COLUMN_SYNONYMS = {
+    "x": ["x", "ln", "lon", "lons", "lng", "lngs", "longitude", "longitudes"],
+    "y": ["y", "lt", "lat", "lats", "latitude", "latitudes"]
+}
+
+# finding coordinates colomns
+def find_column(df, possible_col_name):
+    for c in possible_col_name:
+        if c in df.columns:
+            return c
+    return None
+
+# main csv parse function
+def parse_csv(upload_file):
+    df = pd.read_csv(upload_file)
+    df.columns = df.columns.str.lower().str.strip()
+
+    # prepare geometry
+    geometry_list = []
+
+    # single-row polygon coordinates
+    if "coordinates" in df.columns:
+        for _, row in df.iterrows():
+            coords = json.loads(row["coordinates"])
+            geometry_list.append(ee.Geometry.Polygon(coords))
+        return geometry_list
+
+    # multirow polygon coordinates
+    x_col = find_column(df, COLUMN_SYNONYMS["x"])
+    y_col = find_column(df, COLUMN_SYNONYMS["y"])
+
+    for _, group in df.groupby("id"):
+        coords = group.sort_values("vertex_index")[[x_col, y_col]].values.tolist()
+        # always check if  the polygon coords close the shape and fix it
+        if coords[0] != coords[-1]:
+            coords.append(coords[0])
+        geometry_list.append(ee.Geometry.Polygon(coords))
+
+    return geometry_list
+
+
+# File Parser: Zipped Shapefile (.shp)
+def parse_zip_shapefile(upload_file):
+    # creating a temporary directoruy
+    with tempfile.TemporaryDirectory() as tmpdir:
+        zip_path = os.path.join(tmpdir, "uploaded.zip")
+
+        # write uploaded file to disk
+        with open(zip_path, "wb") as f:
+            f.write(upload_file.read())
+
+        # extract zipfile content
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(tmpdir)
+
+        # parse for .shp file within extracted content
+        shp_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+        if not shp_files:
+            return None
+
+        #laod shapefile with geopandas
+        gdf = gpd.read_file(shp_files[0])
+
+        # convert geometry to match earth engine geometry object (as multipolygon)
+        geometry_list = []
+        for geom in gdf.geometry:
+            if geom.geom_type == "Polygon":
+                coords = [list(geom.exterior.coords)]
+                ee_geom = ee.Geometry.Polygon(coords)
+            elif geom.geom_type == "MultiPolygon":
+                coords = [list(p.exterior.coords) for p in geom.geoms]
+                ee_geom = ee.Geometry.MultiPolygon(coords)
+            else:
+                continue
+            geometry_list.append(ee_geom)
+
+        return geometry_list
+        
+
+# File Parser: KML (.kml)
+def parse_kml(upload_file):
+    upload_file.seek(0)
+    tree = ET.parse(upload_file)
+    # get the kml tree structure
+    root = tree.getroot()
+    # namespace
+    ns = {"kml": "http://www.opengis.net/kml/2.2"}
+
+    polygons = []
+    # getting coordinates from placemark in the kml
+    for placemark in root.findall(".//kml:Placemark", ns):
+        coords_text = placemark.find(".//kml:coordinates", ns)
+        if coords_text is not None:
+            coords_raw = coords_text.text.strip().split()
+            coords = []
+            for c in coords_raw:
+                lon, lat, *_ = map(float, c.split(","))
+                coords.append([lon, lat])
+
+            # ensuring closed polygon using same xy at start and end
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+            polygons.append(ee.Geometry.Polygon([coords]))
+
+    return polygons
+
+
+# File Parser: TopoJSON (.topojson, .json)
+def parse_topojson(upload_file):
+    
+    bytes_data = upload_file.read()
+    topojson_data = json.loads(bytes_data)
+    
+    # Check if this is actually a TopoJSON file
+    if 'type' in topojson_data and topojson_data['type'] == 'Topology':
+        # Manually decode TopoJSON arcs to avoid library performance issues
+        # Extract arcs and transform parameters
+        arcs = topojson_data.get('arcs', [])
+        transform = topojson_data.get('transform', {})
+        scale = transform.get('scale', [1, 1])
+        translate = transform.get('translate', [0, 0])
+        
+        # Decode arcs from delta-encoded to absolute coordinates
+        decoded_arcs = []
+        for arc in arcs:
+            x, y = 0, 0
+            points = []
+            for dx, dy in arc:
+                x += dx
+                y += dy
+                lon = x * scale[0] + translate[0]
+                lat = y * scale[1] + translate[1]
+                points.append([lon, lat])
+            decoded_arcs.append(points)
+        
+        # Extract geometries from objects
+        geometries = []
+        if 'objects' in topojson_data:
+            for obj_name, obj_data in topojson_data['objects'].items():
+                if obj_data.get('type') == 'GeometryCollection':
+                    geometries.extend(obj_data.get('geometries', []))
+                else:
+                    geometries.append(obj_data)        
+        # Convert geometry to match earth engine geometry object (as multipolygon)
+        
+        # Convert geometries to Earth Engine geometry objects
+        geometry_list = []
+        
+        for geom_data in geometries:
+            geom_type = geom_data.get('type')
+            arcs_refs = geom_data.get('arcs', [])
+            
+            if geom_type == 'Polygon':
+                # Polygon: arcs_refs is a list of arc index lists (one per ring)
+                rings = []
+                for ring_refs in arcs_refs:
+                    ring = []
+                    for arc_ref in ring_refs:
+                        arc_idx = abs(arc_ref)
+                        arc_points = decoded_arcs[arc_idx] if arc_ref >= 0 else list(reversed(decoded_arcs[arc_idx]))
+                        ring.extend(arc_points)
+                    rings.append(ring)
+                
+                try:
+                    ee_geom = ee.Geometry.Polygon(rings)
+                    geometry_list.append(ee_geom)
+                except Exception:
+                    continue
+                    
+            elif geom_type == 'MultiPolygon':
+                # MultiPolygon: arcs_refs is a list of polygons
+                polygons = []
+                for polygon_refs in arcs_refs:
+                    rings = []
+                    for ring_refs in polygon_refs:
+                        ring = []
+                        for arc_ref in ring_refs:
+                            arc_idx = abs(arc_ref)
+                            arc_points = decoded_arcs[arc_idx] if arc_ref >= 0 else list(reversed(decoded_arcs[arc_idx]))
+                            ring.extend(arc_points)
+                        rings.append(ring)
+                    polygons.append(rings)
+                
+                try:
+                    ee_geom = ee.Geometry.MultiPolygon(polygons)
+                    geometry_list.append(ee_geom)
+                except Exception:
+                    continue
+                        
+        return geometry_list
+    else:
+        # Not a valid TopoJSON file
+        return []
+
+
+# File Parser: GeoJSON (.geojson, .json)
+def parse_geojson(upload_file):
+
+    bytes_data = upload_file.read()
+    geojson_data = json.loads(bytes_data)
+
+    # detect the correct container of features
+    if 'features' in geojson_data and isinstance(geojson_data['features'], list):
+        features = geojson_data['features']
+    elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
+        # Handle GeometryCollection-style structures
+        features = [{'geometry': geo} for geo in geojson_data['geometries']]
+    else:
+        # skip unsupported or invalid GeoJSON
+        return []
+
+    geometry_list = []
+
+    # build Earth Engine geometries
+    for feature in features:
+        if 'geometry' in feature and 'coordinates' in feature['geometry']:
+            coordinates = feature['geometry']['coordinates']
+            geometry_type = feature['geometry']['type']
+
+            # Create Polygon or MultiPolygon geometry
+            geometry = (
+                ee.Geometry.Polygon(coordinates)
+                if geometry_type == 'Polygon'
+                else ee.Geometry.MultiPolygon(coordinates)
+            )
+
+            geometry_list.append(geometry)
+
+    return geometry_list
+
+
+
+# Main Upload Function
 last_uploaded_centroid = None
 def upload_files_proc(upload_files):
     # A global variable to track the latest geojson uploaded
@@ -341,32 +607,70 @@ def upload_files_proc(upload_files):
     geometry_aoi_list = []
 
     for upload_file in upload_files:
-        bytes_data = upload_file.read()
-        geojson_data = json.loads(bytes_data)
+        # Get the file name for extension detection
+        file_name = getattr(upload_file, 'name').lower()
+        # reset file pointer if it was read before
+        upload_file.seek(0)
 
-        if 'features' in geojson_data and isinstance(geojson_data['features'], list):
-            # Handle GeoJSON files with a 'features' list
-            features = geojson_data['features']
-        elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
-            # Handle GeoJSON files with a 'geometries' list
-            features = [{'geometry': geo} for geo in geojson_data['geometries']]
-        else:
-            # handling cases of unexpected file format or missing 'features' or 'geometries'
+        # File Parser: GeoPackage
+        if file_name.endswith(".gpkg"):
+            # store gpkg into a temporary file for Fiona
+            with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tmp:
+                # write uploaded file content to temp file
+                tmp.write(upload_file.getbuffer())
+                # write data to disk for readability
+                tmp.flush()
+                # parse temporary geopackage
+                gpkg_geoms = parse_geopackage(tmp.name)
+            geometry_aoi_list.extend(gpkg_geoms)
+            if gpkg_geoms:
+                last_uploaded_centroid = gpkg_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
             continue
 
-        for feature in features:
-            if 'geometry' in feature and 'coordinates' in feature['geometry']:
-                coordinates = feature['geometry']['coordinates']
-                geometry = ee.Geometry.Polygon(coordinates) if feature['geometry']['type'] == 'Polygon' else ee.Geometry.MultiPolygon(coordinates)
-                geometry_aoi_list.append(geometry)
+        # File Parser: CSV
+        if file_name.endswith(".csv"):
+            csv_geoms = parse_csv(upload_file)
+            geometry_aoi_list.extend(csv_geoms)
+            last_uploaded_centroid = csv_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
+            continue
 
-                # Update the last uploaded centroid
-                last_uploaded_centroid = geometry.centroid(maxError=1).getInfo()['coordinates']
+        # File Parser: KML
+        if file_name.endswith(".kml"):
+            kml_geoms = parse_kml(upload_file)
+            if kml_geoms:
+                geometry_aoi_list.extend(kml_geoms)
+                last_uploaded_centroid = kml_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+        
+        # File Parser: ZIP .Shapefile
+        if file_name.endswith(".zip"):
+            shp_geoms = parse_zip_shapefile(upload_file)
+            if shp_geoms:
+                geometry_aoi_list.extend(shp_geoms)
+                last_uploaded_centroid = shp_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
 
+        # File Parser: TopoJSON files
+        if file_name.endswith(".topojson"):
+            topojson_geoms = parse_topojson(upload_file)
+            geometry_aoi_list.extend(topojson_geoms)
+            if topojson_geoms:
+                last_uploaded_centroid = topojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+
+        # File Parser: GeoJSON files
+        if file_name.endswith(".geojson") or file_name.endswith(".json"):
+            geojson_geoms = parse_geojson(upload_file)
+            geometry_aoi_list.extend(geojson_geoms)
+            if geojson_geoms:
+                last_uploaded_centroid = geojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+
+    # assembling aoi geometries
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
     else:
-        geometry_aoi = ee.Geometry.Point([27.98, 36.13])
+        geometry_aoi = ee.Geometry.Point([16.25, 36.65])
 
     return geometry_aoi
 
@@ -602,7 +906,7 @@ def main():
                     }
                 </style>
 
-            🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://www.mapbox.com/about/maps" target="_blank" rel="noopener noreferrer">Mapbox</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
+                🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://www.mapbox.com/about/maps" target="_blank" rel="noopener noreferrer">Mapbox</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
             """
 
             # add attribution control
