@@ -310,6 +310,13 @@ def ee_authenticate():
         # Fallback to normal init method if no json key/st secrets available. (local machine)
         ee.Initialize()
 
+
+# Error dialog box
+@st.dialog("Error Report:")
+def show_error_dialog(messages):
+    st.error(messages)
+
+
 # Earth Engine drawing method setup
 def add_ee_layer(self, ee_image_object, vis_params, name):
     map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
@@ -326,6 +333,7 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
 
+
 # Defining a function to create and filter a GEE image collection for results
 def satCollection(cloudRate, initialDate, updatedDate, aoi):
     collection = ee.ImageCollection('COPERNICUS/S2_SR') \
@@ -341,27 +349,53 @@ def satCollection(cloudRate, initialDate, updatedDate, aoi):
     return collection
 
 
-# File Parser: GeoPackage (`.gpkg`)
-def parse_geopackage(upload_file):
-
+# File Parser: GeoPackage (.gpkg)
+def parse_geopackage(gpkg_path):
     # prepare geometry
     geometry_list = []
-    
-    with fiona.open(upload_file) as fu:
-        for feat in fu:
-            # Convert geometry to a Shapely geometry object
-            geom = shape(feat["geometry"])
 
-            # handle basic polygon
-            if geom.geom_type == "Polygon":
-                geometry_list.append(ee.Geometry.Polygon(list(geom.exterior.coords)))
-            
-            # handle multipolygon
-            elif geom.geom_type == "MultiPolygon":
-                coords = [list(poly.exterior.coords) for poly in geom.geoms]
-                geometry_list.append(ee.Geometry.MultiPolygon(coords))
-    
-    return geometry_list
+    try:
+        with fiona.open(gpkg_path) as fu:
+
+            if len(fu) == 0:
+                return [], "GeoPackage contains no features."
+
+            for feat in fu:
+                if not feat or not feat.get("geometry"):
+                    continue
+
+                try:
+                    geom = shape(feat["geometry"])
+                except Exception:
+                    continue
+
+                # Polygon
+                if geom.geom_type == "Polygon":
+                    try:
+                        geometry_list.append(ee.Geometry.Polygon(list(geom.exterior.coords)))
+                    except Exception:
+                        continue
+
+                # MultiPolygon
+                elif geom.geom_type == "MultiPolygon":
+                    try:
+                        coords = [list(poly.exterior.coords) for poly in geom.geoms]
+                        geometry_list.append(ee.Geometry.MultiPolygon(coords))
+                    except Exception:
+                        continue
+
+                # Ignore other geometry types silently
+
+        if not geometry_list:
+            return [], "No valid Polygon or MultiPolygon geometries found in GeoPackage."
+
+        return geometry_list, None
+
+    except fiona.errors.DriverError:
+        return [], "Invalid or corrupted GeoPackage file."
+
+    except Exception as e:
+        return [], f"Error processing GeoPackage file: {str(e)}"
 
 
 # File Parser: CSV
@@ -380,114 +414,216 @@ def find_column(df, possible_col_name):
 
 # main csv parse function
 def parse_csv(upload_file):
-    df = pd.read_csv(upload_file)
-    df.columns = df.columns.str.lower().str.strip()
+    try:
+        try:
+            df = pd.read_csv(upload_file)
+        except Exception:
+            return [], "Invalid CSV file. Could not be read."
+        if df.empty:
+            return [], "CSV file is empty."
 
-    # prepare geometry
-    geometry_list = []
-
-    # single-row polygon coordinates
-    if "coordinates" in df.columns:
-        for _, row in df.iterrows():
-            coords = json.loads(row["coordinates"])
-            geometry_list.append(ee.Geometry.Polygon(coords))
-        return geometry_list
-
-    # multirow polygon coordinates
-    x_col = find_column(df, COLUMN_SYNONYMS["x"])
-    y_col = find_column(df, COLUMN_SYNONYMS["y"])
-
-    for _, group in df.groupby("id"):
-        coords = group.sort_values("vertex_index")[[x_col, y_col]].values.tolist()
-        # always check if  the polygon coords close the shape and fix it
-        if coords[0] != coords[-1]:
-            coords.append(coords[0])
-        geometry_list.append(ee.Geometry.Polygon(coords))
-
-    return geometry_list
-
-
-# File Parser: Zipped Shapefile (.shp)
-def parse_zip_shapefile(upload_file):
-    # creating a temporary directoruy
-    with tempfile.TemporaryDirectory() as tmpdir:
-        zip_path = os.path.join(tmpdir, "uploaded.zip")
-
-        # write uploaded file to disk
-        with open(zip_path, "wb") as f:
-            f.write(upload_file.read())
-
-        # extract zipfile content
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(tmpdir)
-
-        # parse for .shp file within extracted content
-        shp_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
-        if not shp_files:
-            return None
-
-        #laod shapefile with geopandas
-        gdf = gpd.read_file(shp_files[0])
-
-        # convert geometry to match earth engine geometry object (as multipolygon)
+        df.columns = df.columns.str.lower().str.strip()
         geometry_list = []
-        for geom in gdf.geometry:
-            if geom.geom_type == "Polygon":
-                coords = [list(geom.exterior.coords)]
-                ee_geom = ee.Geometry.Polygon(coords)
-            elif geom.geom_type == "MultiPolygon":
-                coords = [list(p.exterior.coords) for p in geom.geoms]
-                ee_geom = ee.Geometry.MultiPolygon(coords)
-            else:
-                continue
-            geometry_list.append(ee_geom)
 
-        return geometry_list
+        # single-row polygon coordinates
+        if "coordinates" in df.columns:
+            for idx, row in df.iterrows():
+                try:
+                    coords = json.loads(row["coordinates"])
+                    geometry_list.append(ee.Geometry.Polygon(coords))
+                except Exception:
+                    return [], "Invalid 'coordinates' column. Must contain valid JSON polygon coordinates."
+            if not geometry_list:
+                return [], "No valid geometries found in 'coordinates' column."
+            return geometry_list, None
+
+        # multi-row polygon coordinates
+        required_cols = ["id", "vertex_index"]
+        for col in required_cols:
+            if col not in df.columns:
+                return [], f"Missing required column '{col}'."
+
+        x_col = find_column(df, COLUMN_SYNONYMS["x"])
+        y_col = find_column(df, COLUMN_SYNONYMS["y"])
+
+        if not x_col or not y_col:
+            return [], "Could not detect longitude/latitude columns."
+
+        for gid, group in df.groupby("id"):
+            try:
+                group = group.sort_values("vertex_index")
+                coords = group[[x_col, y_col]].values.tolist()
+                
+                # checks for minimum polygon vertices
+                if len(coords) < 3:
+                    return [], f"Polygon with id '{gid}' has fewer than 3 vertices."
+                # always check if  the polygon coords close the shape and fix it
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                geometry_list.append(ee.Geometry.Polygon(coords))
+
+            except Exception:
+                return [], f"Invalid polygon geometry for id '{gid}'."
+
+        if not geometry_list:
+            return [], "No valid polygon geometries could be constructed from CSV."
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing CSV file: {str(e)}"
+
+
+# File Parser: Zipped Shapefile (.zip)
+def parse_zip_shapefile(upload_file):
+    try:
+        # creating a temporary directoruy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "uploaded.zip")
+
+            try:
+                # write uploaded file to disk
+                with open(zip_path, "wb") as f:
+                    f.write(upload_file.read())
+            except Exception:
+                return [], "Couldn't read uploaded Zip file."
+
+            try:
+                # extract zipfile content
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    zf.extractall(tmpdir)
+            except zipfile.BadZipFile:
+                return [], "Not a valid zip file."
+
+            # parse for .shp file within extracted content
+            shp_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_files:
+                return [], "Zip file does not contain .SHP file."
+
+            #laod shapefile with geopandas
+            try:
+                gdf = gpd.read_file(shp_files[0])
+            except Exception as e:
+                return [], f"Failed to read Shapefile with GeoPandas: Missing one or multiple companion files (.SHX, .DBF, .CPG, .PRJ) {str(e)}"
+
+            if gdf.empty:
+                return [], "Shapefile contains no features."
+
+            # convert geometry to match earth engine geometry object (as multipolygon)
+            geometry_list = []
+
+            for geom in gdf.geometry:
+                try:
+                    if geom.geom_type == "Polygon":
+                        coords = [list(geom.exterior.coords)]
+                        ee_geom = ee.Geometry.Polygon(coords)
+                    elif geom.geom_type == "MultiPolygon":
+                        coords = [list(p.exterior.coords) for p in geom.geoms]
+                        ee_geom = ee.Geometry.MultiPolygon(coords)
+                    else:
+                        continue  # ignore non-area geometries
+                    geometry_list.append(ee_geom)
+
+                except Exception:
+                    continue  # skip invalid EE geometries
+
+            if not geometry_list:
+                return [], "No valid Polygon or MultiPolygon geometries found in Shapefile."
+
+            return geometry_list, None
+
+    except Exception as e:
+        return [], f"Unexpected error while processing Shapefile: {str(e)}"
         
+
 
 # File Parser: KML (.kml)
 def parse_kml(upload_file):
-    upload_file.seek(0)
-    tree = ET.parse(upload_file)
-    # get the kml tree structure
-    root = tree.getroot()
-    # namespace
-    ns = {"kml": "http://www.opengis.net/kml/2.2"}
+    try:
+        upload_file.seek(0)
+        try:
+            tree = ET.parse(upload_file)
+        except ET.ParseError:
+            return [], "Invalid KML file. XML could not be parsed."
 
-    polygons = []
-    # getting coordinates from placemark in the kml
-    for placemark in root.findall(".//kml:Placemark", ns):
-        coords_text = placemark.find(".//kml:coordinates", ns)
-        if coords_text is not None:
-            coords_raw = coords_text.text.strip().split()
-            coords = []
-            for c in coords_raw:
-                lon, lat, *_ = map(float, c.split(","))
-                coords.append([lon, lat])
+        # get kml tree structure
+        root = tree.getroot()
 
-            # ensuring closed polygon using same xy at start and end
-            if coords[0] != coords[-1]:
-                coords.append(coords[0])
-            polygons.append(ee.Geometry.Polygon([coords]))
+        # namespace
+        ns = {"kml": "http://www.opengis.net/kml/2.2"}
 
-    return polygons
+        placemarks = root.findall(".//kml:Placemark", ns)
+        if not placemarks:
+            return [], "No Placemark elements found in KML file."
+
+        geometry_list = []
+
+        # getting coordinates from placemark in the kml
+        for placemark in placemarks:
+            coords_elem = placemark.find(".//kml:coordinates", ns)
+            if coords_elem is None or not coords_elem.text:
+                continue
+
+            try:
+                coords_raw = coords_elem.text.strip().split()
+                coords = []
+
+                for c in coords_raw:
+                    lon, lat, *_ = map(float, c.split(","))
+                    coords.append([lon, lat])
+
+                # valid polygon needs at least 3 points
+                if len(coords) < 3:
+                    continue
+
+                # ensure closed polygon
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+
+                ee_geom = ee.Geometry.Polygon([coords])
+                geometry_list.append(ee_geom)
+
+            except Exception:
+                # skip malformed placemark
+                continue
+
+        if not geometry_list:
+            return [], "No valid polygon geometries could be constructed from KML."
+
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing KML file: {str(e)}"
 
 
-# File Parser: TopoJSON (.topojson, .json)
+# File Parser: TopoJSON (.topojson)
 def parse_topojson(upload_file):
-    
-    bytes_data = upload_file.read()
-    topojson_data = json.loads(bytes_data)
-    
-    # Check if this is actually a TopoJSON file
-    if 'type' in topojson_data and topojson_data['type'] == 'Topology':
+    try:
+        bytes_data = upload_file.read()
+
+        try:
+            topojson_data = json.loads(bytes_data)
+        except json.JSONDecodeError:
+            return [], "Invalid TopoJSON file. JSON could not be decoded."
+
+        # Check TopoJSON signature
+        if topojson_data.get("type") != "Topology":
+            return [], "File is not a valid TopoJSON (missing or invalid 'Topology' type)."
+
         # Manually decode TopoJSON arcs to avoid library performance issues
         # Extract arcs and transform parameters
-        arcs = topojson_data.get('arcs', [])
-        transform = topojson_data.get('transform', {})
-        scale = transform.get('scale', [1, 1])
-        translate = transform.get('translate', [0, 0])
-        
+        arcs = topojson_data.get("arcs")
+        objects = topojson_data.get("objects")
+        transform = topojson_data.get("transform", {})
+        scale = transform.get("scale", [1, 1])
+        translate = transform.get("translate", [0, 0])
+
+        if not arcs or not isinstance(arcs, list):
+            return [], "TopoJSON file contains no valid arcs."
+
+        if not objects or not isinstance(objects, dict):
+            return [], "TopoJSON file contains no objects."
+
+
         # Decode arcs from delta-encoded to absolute coordinates
         decoded_arcs = []
         for arc in arcs:
@@ -500,102 +636,123 @@ def parse_topojson(upload_file):
                 lat = y * scale[1] + translate[1]
                 points.append([lon, lat])
             decoded_arcs.append(points)
-        
+
         # Extract geometries from objects
         geometries = []
-        if 'objects' in topojson_data:
-            for obj_name, obj_data in topojson_data['objects'].items():
-                if obj_data.get('type') == 'GeometryCollection':
-                    geometries.extend(obj_data.get('geometries', []))
-                else:
-                    geometries.append(obj_data)        
-        # Convert geometry to match earth engine geometry object (as multipolygon)
-        
+        for obj in objects.values():
+            if obj.get("type") == "GeometryCollection":
+                geometries.extend(obj.get("geometries", []))
+            else:
+                geometries.append(obj)
+
+        if not geometries:
+            return [], "TopoJSON file contains no geometries."
+
         # Convert geometries to Earth Engine geometry objects
         geometry_list = []
-        
+
+        # Build Earth Engine geometries
         for geom_data in geometries:
-            geom_type = geom_data.get('type')
-            arcs_refs = geom_data.get('arcs', [])
-            
-            if geom_type == 'Polygon':
-                # Polygon: arcs_refs is a list of arc index lists (one per ring)
-                rings = []
-                for ring_refs in arcs_refs:
-                    ring = []
-                    for arc_ref in ring_refs:
-                        arc_idx = abs(arc_ref)
-                        arc_points = decoded_arcs[arc_idx] if arc_ref >= 0 else list(reversed(decoded_arcs[arc_idx]))
-                        ring.extend(arc_points)
-                    rings.append(ring)
-                
-                try:
-                    ee_geom = ee.Geometry.Polygon(rings)
-                    geometry_list.append(ee_geom)
-                except Exception:
-                    continue
-                    
-            elif geom_type == 'MultiPolygon':
-                # MultiPolygon: arcs_refs is a list of polygons
-                polygons = []
-                for polygon_refs in arcs_refs:
+            geom_type = geom_data.get("type")
+            arcs_refs = geom_data.get("arcs")
+
+            if not arcs_refs:
+                continue
+
+            try:
+                # Polygon
+                if geom_type == "Polygon":
+                    # Polygon: arcs_refs is a list of arc index lists (one per ring)
                     rings = []
-                    for ring_refs in polygon_refs:
+                    for ring_refs in arcs_refs:
                         ring = []
                         for arc_ref in ring_refs:
                             arc_idx = abs(arc_ref)
-                            arc_points = decoded_arcs[arc_idx] if arc_ref >= 0 else list(reversed(decoded_arcs[arc_idx]))
+                            arc_points = (
+                                decoded_arcs[arc_idx]
+                                if arc_ref >= 0
+                                else list(reversed(decoded_arcs[arc_idx]))
+                            )
                             ring.extend(arc_points)
                         rings.append(ring)
-                    polygons.append(rings)
-                
-                try:
-                    ee_geom = ee.Geometry.MultiPolygon(polygons)
-                    geometry_list.append(ee_geom)
-                except Exception:
-                    continue
-                        
-        return geometry_list
-    else:
-        # Not a valid TopoJSON file
-        return []
+
+                    geometry_list.append(ee.Geometry.Polygon(rings))
+
+                # MultiPolygon
+                elif geom_type == "MultiPolygon":
+                    polygons = []
+                    for polygon_refs in arcs_refs:
+                        rings = []
+                        for ring_refs in polygon_refs:
+                            ring = []
+                            for arc_ref in ring_refs:
+                                arc_idx = abs(arc_ref)
+                                arc_points = (
+                                    decoded_arcs[arc_idx]
+                                    if arc_ref >= 0
+                                    else list(reversed(decoded_arcs[arc_idx]))
+                                )
+                                ring.extend(arc_points)
+                            rings.append(ring)
+                        polygons.append(rings)
+
+                    geometry_list.append(ee.Geometry.MultiPolygon(polygons))
+
+                # Ignore other geometry types
+
+            except Exception:
+                continue
+
+        if not geometry_list:
+            return [], "No valid Polygon or MultiPolygon geometries could be constructed from TopoJSON."
+
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing TopoJSON file: {str(e)}"
 
 
 # File Parser: GeoJSON (.geojson, .json)
 def parse_geojson(upload_file):
+    try:
+        bytes_data = upload_file.read()
+        try:
+            geojson_data = json.loads(bytes_data)
+        except json.JSONDecodeError:
+            return [], "Invalid GeoJSON file. JSON could not be decoded."
 
-    bytes_data = upload_file.read()
-    geojson_data = json.loads(bytes_data)
+        # detect the correct container of features
+        if 'features' in geojson_data and isinstance(geojson_data['features'], list):
+            features = geojson_data['features']
+        elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
+            # Handle GeometryCollection-style structures
+            features = [{'geometry': geo} for geo in geojson_data['geometries']]
+        else:
+            # skip unsupported or invalid GeoJSON
+            return [], "Unsupported GeoJSON structure. Must containe a 'features' or 'geometries' field."
 
-    # detect the correct container of features
-    if 'features' in geojson_data and isinstance(geojson_data['features'], list):
-        features = geojson_data['features']
-    elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
-        # Handle GeometryCollection-style structures
-        features = [{'geometry': geo} for geo in geojson_data['geometries']]
-    else:
-        # skip unsupported or invalid GeoJSON
-        return []
+        geometry_list = []
 
-    geometry_list = []
+        # build Earth Engine geometries
+        for feature in features:
+            if 'geometry' in feature and 'coordinates' in feature['geometry']:
+                coordinates = feature['geometry']['coordinates']
+                geometry_type = feature['geometry']['type']
 
-    # build Earth Engine geometries
-    for feature in features:
-        if 'geometry' in feature and 'coordinates' in feature['geometry']:
-            coordinates = feature['geometry']['coordinates']
-            geometry_type = feature['geometry']['type']
+                # Create Polygon or MultiPolygon geometry
+                geometry = (
+                    ee.Geometry.Polygon(coordinates)
+                    if geometry_type == 'Polygon'
+                    else ee.Geometry.MultiPolygon(coordinates)
+                )
 
-            # Create Polygon or MultiPolygon geometry
-            geometry = (
-                ee.Geometry.Polygon(coordinates)
-                if geometry_type == 'Polygon'
-                else ee.Geometry.MultiPolygon(coordinates)
-            )
+                geometry_list.append(geometry)
 
-            geometry_list.append(geometry)
-
-    return geometry_list
-
+        if not geometry_list:
+            return [], "No valide geometries in the GeoJSON file. Ensure it contains Polygon or MultiPolygon features."
+        return geometry_list, None
+    except Exception as e:
+        return [], f"Error processing GeoJSON file: {str(e)} Please verify the file is valid."
 
 
 # Main Upload Function
@@ -605,7 +762,9 @@ def upload_files_proc(upload_files):
     global last_uploaded_centroid
     # Setting up a variable that takes all polygons/geometries within the same/different geojson
     geometry_aoi_list = []
-
+    # Variable to store all error messages from various parsers
+    error_messages = []
+    
     for upload_file in upload_files:
         # Get the file name for extension detection
         file_name = getattr(upload_file, 'name').lower()
@@ -621,7 +780,9 @@ def upload_files_proc(upload_files):
                 # write data to disk for readability
                 tmp.flush()
                 # parse temporary geopackage
-                gpkg_geoms = parse_geopackage(tmp.name)
+                gpkg_geoms, error = parse_geopackage(tmp.name)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
             geometry_aoi_list.extend(gpkg_geoms)
             if gpkg_geoms:
                 last_uploaded_centroid = gpkg_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
@@ -629,30 +790,39 @@ def upload_files_proc(upload_files):
 
         # File Parser: CSV
         if file_name.endswith(".csv"):
-            csv_geoms = parse_csv(upload_file)
+            csv_geoms, error = parse_csv(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
             geometry_aoi_list.extend(csv_geoms)
-            last_uploaded_centroid = csv_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
+            if csv_geoms:
+                last_uploaded_centroid = csv_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
             continue
 
         # File Parser: KML
         if file_name.endswith(".kml"):
-            kml_geoms = parse_kml(upload_file)
+            kml_geoms, error = parse_kml(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(kml_geoms)
             if kml_geoms:
-                geometry_aoi_list.extend(kml_geoms)
                 last_uploaded_centroid = kml_geoms[0].centroid(maxError=1).getInfo()['coordinates']
             continue
-        
+
         # File Parser: ZIP .Shapefile
         if file_name.endswith(".zip"):
-            shp_geoms = parse_zip_shapefile(upload_file)
+            shp_geoms, error = parse_zip_shapefile(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(shp_geoms)
             if shp_geoms:
-                geometry_aoi_list.extend(shp_geoms)
                 last_uploaded_centroid = shp_geoms[0].centroid(maxError=1).getInfo()['coordinates']
             continue
 
         # File Parser: TopoJSON files
         if file_name.endswith(".topojson"):
-            topojson_geoms = parse_topojson(upload_file)
+            topojson_geoms, error = parse_topojson(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
             geometry_aoi_list.extend(topojson_geoms)
             if topojson_geoms:
                 last_uploaded_centroid = topojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
@@ -660,12 +830,16 @@ def upload_files_proc(upload_files):
 
         # File Parser: GeoJSON files
         if file_name.endswith(".geojson") or file_name.endswith(".json"):
-            geojson_geoms = parse_geojson(upload_file)
+            geojson_geoms, error = parse_geojson(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}: \n > {error}")
             geometry_aoi_list.extend(geojson_geoms)
             if geojson_geoms:
                 last_uploaded_centroid = geojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
             continue
-
+    
+    if error_messages:
+        show_error_dialog("\n\n---\n\n".join(error_messages))
     # assembling aoi geometries
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
@@ -673,6 +847,8 @@ def upload_files_proc(upload_files):
         geometry_aoi = ee.Geometry.Point([16.25, 36.65])
 
     return geometry_aoi
+
+
 
 
 # Time input processing function
