@@ -336,17 +336,33 @@ folium.Map.add_ee_layer = add_ee_layer
 
 # Defining a function to create and filter a GEE image collection for results
 def satCollection(cloudRate, initialDate, updatedDate, aoi):
-    collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudRate)) \
-        .filterDate(initialDate, updatedDate) \
-        .filterBounds(aoi)
+    try:
+        collection = (
+            ee.ImageCollection('COPERNICUS/S2_SR')
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudRate))
+            .filterDate(initialDate, updatedDate)
+            .filterBounds(aoi)
+            )
+            
+        # Check collection size
+        collection_size = collection.size().getInfo()
+
+        if collection_size == 0:
+            return None, (
+                "No Sentinel-2 L2A images found for the selected parameters. \n\n"
+                "Try increasing the cloud threshold or expanding the date range."
+            )
+
+        # Defining a function to clip the colleciton to the area of interst
+        def clipCollection(image):
+            return image.clip(aoi).divide(10000)
+        # clipping the collection
+        collection = collection.map(clipCollection)
+        
+        return collection, None
     
-    # Defining a function to clip the colleciton to the area of interst
-    def clipCollection(image):
-        return image.clip(aoi).divide(10000)
-    # clipping the collection
-    collection = collection.map(clipCollection)
-    return collection
+    except Exception as e:
+        return collection, f"Earth Engine encountered an error while building Sentinel-2 Collection: \n {str(e)}"
 
 
 # File Parser: GeoPackage (.gpkg)
@@ -849,8 +865,6 @@ def upload_files_proc(upload_files):
     return geometry_aoi
 
 
-
-
 # Time input processing function
 def date_input_proc(input_date, time_range):
     end_date = input_date
@@ -864,6 +878,9 @@ def date_input_proc(input_date, time_range):
 def main():
     # initiate gee 
     ee_authenticate()
+
+    # Session states
+    st.session_state.setdefault("ee_ready", False)
 
     # sidebar
     with st.sidebar:
@@ -1090,104 +1107,136 @@ def main():
 
 
             #### Satellite imagery Processing Section - START
-            ## Defining and clipping image collections for both dates:
-            # initial Image collection
-            initial_collection = satCollection(cloud_pixel_percentage, str_initial_start_date, str_initial_end_date, geometry_aoi)
-            # updated Image collection
-            updated_collection = satCollection(cloud_pixel_percentage, str_updated_start_date, str_updated_end_date, geometry_aoi)
-
-            # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
-            initial_sat_imagery = initial_collection.median()
-            updated_sat_imagery = updated_collection.median()
-
-            ## TCI (True Color Imagery)
-            # Clipping the image to the area of interest "aoi"
-            initial_tci_image = initial_sat_imagery
-            updated_tci_image = updated_sat_imagery
-
-            # TCI image visual parameters
-            tci_params = {
-            'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
-            'min': 0,
-            'max': 1,
-            'gamma': 1
-            }
-
-            ## Other imagery processing operations go here 
-            # NDVI
-            def getNDVI(collection):
-                return collection.normalizedDifference(['B8', 'B4'])
-
-            # clipping to AOI
-            initial_ndvi = getNDVI(initial_sat_imagery)
-            updated_ndvi = getNDVI(updated_sat_imagery)
-
-            # NDVI visual parameters:
-            ndvi_params = {
-            'min': 0,
-            'max': 1,
-            'palette': ndvi_palette
-            }
-
-            # Masking NDVI over the water & show only land
-            def satImageMask(sat_image):
-                masked_image = sat_image.updateMask(sat_image.gte(0))
-                return masked_image
+            ee_errors = []
+            ee_ready = True
             
-            # Mask NDVI images
-            initial_ndvi = satImageMask(initial_ndvi)
-            updated_ndvi = satImageMask(updated_ndvi)
+            ## Defining and clipping image collections for both dates:
+           
+            # initial Image collection
+            initial_collection, initial_collection_error = satCollection(cloud_pixel_percentage, str_initial_start_date, str_initial_end_date, geometry_aoi)
+            
+            if initial_collection_error:
+                ee_errors.append(f"INITIAL DATE - NDVI Collection Error: \n > {initial_collection_error}")
+                ee_ready = False
 
-            # ##### NDVI classification: 7 classes
-            def classify_ndvi(masked_image): # better use a masked image to avoid water bodies obstracting the result as possible
-                ndvi_classified = ee.Image(masked_image) \
-                .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
-                .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
-                .where(masked_image.gte(0.25).And(masked_image.lt(0.35)), 3) \
-                .where(masked_image.gte(0.35).And(masked_image.lt(0.45)), 4) \
-                .where(masked_image.gte(0.45).And(masked_image.lt(0.65)), 5) \
-                .where(masked_image.gte(0.65).And(masked_image.lt(0.75)), 6) \
-                .where(masked_image.gte(0.75), 7) \
+            # updated Image collection
+            updated_collection, updated_collection_error = satCollection(cloud_pixel_percentage, str_updated_start_date, str_updated_end_date, geometry_aoi)
+            
+            if updated_collection_error:
+                ee_errors.append(f"UPDATED DATE - NDVI Collection Error: \n > {updated_collection_error}")
+                ee_ready = False
+
+            # in case where both dates have no corresponding results to the query parameters (avoids double dialog popup crash)
+            # if initial_collection_error and updated_collection_error:
+            #     show_error_dialog(f"No Image Collection Found for any Date: \n > {initial_collection_error} \n {updated_collection_error}")
+            #     ee_ready = False
+
+            if ee_errors:
+                show_error_dialog("\n\n---\n\n".join(ee_errors))
                 
-                return ndvi_classified
+            if ee_ready:
+                # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
+                initial_sat_imagery = initial_collection.median()
+                updated_sat_imagery = updated_collection.median()
 
-            # Classify masked NDVI
-            initial_ndvi_classified = classify_ndvi(initial_ndvi)
-            updated_ndvi_classified = classify_ndvi(updated_ndvi)
+                ## TCI (True Color Imagery)
+                # Clipping the image to the area of interest "aoi"
+                initial_tci_image = initial_sat_imagery
+                updated_tci_image = updated_sat_imagery
 
-            # Classified NDVI visual parameters
-            ndvi_classified_params = {
-            'min': 1,
-            'max': 7,
-            'palette': reclassified_ndvi_palette
-            # each color corresponds to an NDVI class.
-            }
+                # TCI image visual parameters
+                tci_params = {
+                'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
+                'min': 0,
+                'max': 1,
+                'gamma': 1
+                }
+
+                ## Other imagery processing operations go here 
+                # NDVI
+                def getNDVI(collection):
+                    return collection.normalizedDifference(['B8', 'B4'])
+
+                # clipping to AOI
+                initial_ndvi = getNDVI(initial_sat_imagery)
+                updated_ndvi = getNDVI(updated_sat_imagery)
+
+                # NDVI visual parameters:
+                ndvi_params = {
+                'min': 0,
+                'max': 1,
+                'palette': ndvi_palette
+                }
+
+                # Masking NDVI over the water & show only land
+                def satImageMask(sat_image):
+                    masked_image = sat_image.updateMask(sat_image.gte(0))
+                    return masked_image
+                
+                # Mask NDVI images
+                initial_ndvi = satImageMask(initial_ndvi)
+                updated_ndvi = satImageMask(updated_ndvi)
+
+                # ##### NDVI classification: 7 classes
+                def classify_ndvi(masked_image): # better use a masked image to avoid water bodies obstracting the result as possible
+                    ndvi_classified = ee.Image(masked_image) \
+                    .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
+                    .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
+                    .where(masked_image.gte(0.25).And(masked_image.lt(0.35)), 3) \
+                    .where(masked_image.gte(0.35).And(masked_image.lt(0.45)), 4) \
+                    .where(masked_image.gte(0.45).And(masked_image.lt(0.65)), 5) \
+                    .where(masked_image.gte(0.65).And(masked_image.lt(0.75)), 6) \
+                    .where(masked_image.gte(0.75), 7) \
+                    
+                    return ndvi_classified
+
+                # Classify masked NDVI
+                initial_ndvi_classified = classify_ndvi(initial_ndvi)
+                updated_ndvi_classified = classify_ndvi(updated_ndvi)
+
+                # Classified NDVI visual parameters
+                ndvi_classified_params = {
+                'min': 1,
+                'max': 7,
+                'palette': reclassified_ndvi_palette
+                # each color corresponds to an NDVI class.
+                }
 
             #### Satellite imagery Processing Section - END
 
             #### Layers section - START
-            # Check if the initial and updated dates are the same
-            if initial_date == updated_date:
-                # Only display the layers based on the updated date without dates in their names
-                m.add_ee_layer(updated_tci_image, tci_params, 'Satellite Imagery')
-                m.add_ee_layer(updated_ndvi, ndvi_params, 'Raw NDVI')
-                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+            if ee_ready:
+                st.session_state.ee_ready = True
+                # Check if the initial and updated dates are the same
+                if initial_date == updated_date:
+                    # Only display the layers based on the updated date without dates in their names
+                    m.add_ee_layer(updated_tci_image, tci_params, 'Satellite Imagery')
+                    m.add_ee_layer(updated_ndvi, ndvi_params, 'Raw NDVI')
+                    m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+                    
+                    st.toast(f"Results found for: \n\n {initial_date}")
+
+                else:
+                    # Show both dates in the appropriate layers
+                    # Satellite image
+                    m.add_ee_layer(initial_tci_image, tci_params, f'Initial Satellite Imagery: {initial_date}')
+                    m.add_ee_layer(updated_tci_image, tci_params, f'Updated Satellite Imagery: {updated_date}')
+
+                    # NDVI
+                    m.add_ee_layer(initial_ndvi, ndvi_params, f'Initial Raw NDVI: {initial_date}')
+                    m.add_ee_layer(updated_ndvi, ndvi_params, f'Updated Raw NDVI: {updated_date}')
+
+                    # Add layers to the second map (m.m2)
+                    # Classified NDVI
+                    m.add_ee_layer(initial_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {initial_date}')
+                    m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, f'Updated Reclassified NDVI: {updated_date}')
+                    
+                    st.toast(f"Results found for: [{initial_date}]-[{updated_date}]")
+
             else:
-                # Show both dates in the appropriate layers
-                # Satellite image
-                m.add_ee_layer(initial_tci_image, tci_params, f'Initial Satellite Imagery: {initial_date}')
-                m.add_ee_layer(updated_tci_image, tci_params, f'Updated Satellite Imagery: {updated_date}')
-
-                # NDVI
-                m.add_ee_layer(initial_ndvi, ndvi_params, f'Initial Raw NDVI: {initial_date}')
-                m.add_ee_layer(updated_ndvi, ndvi_params, f'Updated Raw NDVI: {updated_date}')
-
-                # Add layers to the second map (m.m2)
-                # Classified NDVI
-                m.add_ee_layer(initial_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {initial_date}')
-                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, f'Updated Reclassified NDVI: {updated_date}')
-
-
+                st.session_state.ee_ready = False
+                st.toast("No satellite imagery available for the selected parameters.")
+            
             #### Layers section - END
 
             #### Map result display - START
