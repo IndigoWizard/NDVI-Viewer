@@ -7,12 +7,21 @@ import ee
 from ee import oauth
 from google.oauth2 import service_account
 import folium
-from folium import WmsTileLayer
 from streamlit_folium import folium_static, st_folium
 from branca.element import Template, MacroElement, Figure, Element
 from folium.utilities import escape_backticks
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
+import pandas as pd
+import geopandas as gpd
+import calendar
+import altair as alt
+import tempfile
+import zipfile
+import os
+import xml.etree.ElementTree as ET
+import fiona
+from shapely.geometry import shape, mapping
 
 st.set_page_config(
     page_title="NDVI Viewer",
@@ -22,7 +31,7 @@ st.set_page_config(
     menu_items={
     'Get help': "https://github.com/IndigoWizard/NDVI-Viewer",
     'Report a bug': "https://github.com/IndigoWizard/NDVI-Viewer/issues",
-    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis. Give proper credit when using or forking the open source projet or its code/piece of code."
+    'About': "This app was developped by [IndigoWizard](https://github.com/IndigoWizard/NDVI-Viewer) for the purpose of environmental monitoring and geospatial analysis. Give proper credit when using this app or forking the open source projet code/piece of code."
     }
 )
 
@@ -301,6 +310,13 @@ def ee_authenticate():
         # Fallback to normal init method if no json key/st secrets available. (local machine)
         ee.Initialize()
 
+
+# Error dialog box
+@st.dialog("Error Report:")
+def show_error_dialog(messages):
+    st.error(messages)
+
+
 # Earth Engine drawing method setup
 def add_ee_layer(self, ee_image_object, vis_params, name):
     map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
@@ -317,56 +333,534 @@ def add_ee_layer(self, ee_image_object, vis_params, name):
 # Configuring Earth Engine display rendering method in Folium
 folium.Map.add_ee_layer = add_ee_layer
 
+
 # Defining a function to create and filter a GEE image collection for results
 def satCollection(cloudRate, initialDate, updatedDate, aoi):
-    collection = ee.ImageCollection('COPERNICUS/S2_SR') \
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudRate)) \
-        .filterDate(initialDate, updatedDate) \
-        .filterBounds(aoi)
-    
-    # Defining a function to clip the colleciton to the area of interst
-    def clipCollection(image):
-        return image.clip(aoi).divide(10000)
-    # clipping the collection
-    collection = collection.map(clipCollection)
-    return collection
+    try:
+        collection = (
+            ee.ImageCollection('COPERNICUS/S2_SR')
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloudRate))
+            .filterDate(initialDate, updatedDate)
+            .filterBounds(aoi)
+            )
+            
+        # Check collection size
+        collection_size = collection.size().getInfo()
 
-# Upload function
-# Define a global variable to store the centroid of the last uploaded geometry
+        if collection_size == 0:
+            return None, (
+                "No Sentinel-2 L2A images found for the selected parameters. \n\n"
+                "Try increasing the cloud threshold or expanding the date range."
+            )
+
+        # Defining a function to clip the colleciton to the area of interst
+        def clipCollection(image):
+            return image.clip(aoi).divide(10000)
+        # clipping the collection
+        collection = collection.map(clipCollection)
+        
+        return collection, None
+    
+    except Exception as e:
+        return collection, f"Earth Engine encountered an error while building Sentinel-2 Collection: \n {str(e)}"
+
+
+# File Parser: GeoPackage (.gpkg)
+def parse_geopackage(gpkg_path):
+    # prepare geometry
+    geometry_list = []
+
+    try:
+        with fiona.open(gpkg_path) as fu:
+
+            if len(fu) == 0:
+                return [], "GeoPackage contains no features."
+
+            for feat in fu:
+                if not feat or not feat.get("geometry"):
+                    continue
+
+                try:
+                    geom = shape(feat["geometry"])
+                except Exception:
+                    continue
+
+                # Polygon
+                if geom.geom_type == "Polygon":
+                    try:
+                        geometry_list.append(ee.Geometry.Polygon(list(geom.exterior.coords)))
+                    except Exception:
+                        continue
+
+                # MultiPolygon
+                elif geom.geom_type == "MultiPolygon":
+                    try:
+                        coords = [list(poly.exterior.coords) for poly in geom.geoms]
+                        geometry_list.append(ee.Geometry.MultiPolygon(coords))
+                    except Exception:
+                        continue
+
+                # Ignore other geometry types silently
+
+        if not geometry_list:
+            return [], "No valid Polygon or MultiPolygon geometries found in GeoPackage."
+
+        return geometry_list, None
+
+    except fiona.errors.DriverError:
+        return [], "Invalid or corrupted GeoPackage file."
+
+    except Exception as e:
+        return [], f"Error processing GeoPackage file: {str(e)}"
+
+
+# File Parser: CSV
+# column name variations found in CSV datasets 
+COLUMN_SYNONYMS = {
+    "x": ["x", "ln", "lon", "lons", "lng", "lngs", "longitude", "longitudes"],
+    "y": ["y", "lt", "lat", "lats", "latitude", "latitudes"]
+}
+
+# finding coordinates colomns
+def find_column(df, possible_col_name):
+    for c in possible_col_name:
+        if c in df.columns:
+            return c
+    return None
+
+# main csv parse function
+def parse_csv(upload_file):
+    try:
+        try:
+            df = pd.read_csv(upload_file)
+        except Exception:
+            return [], "Invalid CSV file. Could not be read."
+        if df.empty:
+            return [], "CSV file is empty."
+
+        df.columns = df.columns.str.lower().str.strip()
+        geometry_list = []
+
+        # single-row polygon coordinates
+        if "coordinates" in df.columns:
+            for idx, row in df.iterrows():
+                try:
+                    coords = json.loads(row["coordinates"])
+                    geometry_list.append(ee.Geometry.Polygon(coords))
+                except Exception:
+                    return [], "Invalid 'coordinates' column. Must contain valid JSON polygon coordinates."
+            if not geometry_list:
+                return [], "No valid geometries found in 'coordinates' column."
+            return geometry_list, None
+
+        # multi-row polygon coordinates
+        required_cols = ["id", "vertex_index"]
+        for col in required_cols:
+            if col not in df.columns:
+                return [], f"Missing required column '{col}'."
+
+        x_col = find_column(df, COLUMN_SYNONYMS["x"])
+        y_col = find_column(df, COLUMN_SYNONYMS["y"])
+
+        if not x_col or not y_col:
+            return [], "Could not detect longitude/latitude columns."
+
+        for gid, group in df.groupby("id"):
+            try:
+                group = group.sort_values("vertex_index")
+                coords = group[[x_col, y_col]].values.tolist()
+                
+                # checks for minimum polygon vertices
+                if len(coords) < 3:
+                    return [], f"Polygon with id '{gid}' has fewer than 3 vertices."
+                # always check if  the polygon coords close the shape and fix it
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                geometry_list.append(ee.Geometry.Polygon(coords))
+
+            except Exception:
+                return [], f"Invalid polygon geometry for id '{gid}'."
+
+        if not geometry_list:
+            return [], "No valid polygon geometries could be constructed from CSV."
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing CSV file: {str(e)}"
+
+
+# File Parser: Zipped Shapefile (.zip)
+def parse_zip_shapefile(upload_file):
+    try:
+        # creating a temporary directoruy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "uploaded.zip")
+
+            try:
+                # write uploaded file to disk
+                with open(zip_path, "wb") as f:
+                    f.write(upload_file.read())
+            except Exception:
+                return [], "Couldn't read uploaded Zip file."
+
+            try:
+                # extract zipfile content
+                with zipfile.ZipFile(zip_path, "r") as zf:
+                    zf.extractall(tmpdir)
+            except zipfile.BadZipFile:
+                return [], "Not a valid zip file."
+
+            # parse for .shp file within extracted content
+            shp_files = [os.path.join(tmpdir, f) for f in os.listdir(tmpdir) if f.endswith(".shp")]
+            if not shp_files:
+                return [], "Zip file does not contain .SHP file."
+
+            #laod shapefile with geopandas
+            try:
+                gdf = gpd.read_file(shp_files[0])
+            except Exception as e:
+                return [], f"Failed to read Shapefile with GeoPandas: Missing one or multiple companion files (.SHX, .DBF, .CPG, .PRJ) {str(e)}"
+
+            if gdf.empty:
+                return [], "Shapefile contains no features."
+
+            # convert geometry to match earth engine geometry object (as multipolygon)
+            geometry_list = []
+
+            for geom in gdf.geometry:
+                try:
+                    if geom.geom_type == "Polygon":
+                        coords = [list(geom.exterior.coords)]
+                        ee_geom = ee.Geometry.Polygon(coords)
+                    elif geom.geom_type == "MultiPolygon":
+                        coords = [list(p.exterior.coords) for p in geom.geoms]
+                        ee_geom = ee.Geometry.MultiPolygon(coords)
+                    else:
+                        continue  # ignore non-area geometries
+                    geometry_list.append(ee_geom)
+
+                except Exception:
+                    continue  # skip invalid EE geometries
+
+            if not geometry_list:
+                return [], "No valid Polygon or MultiPolygon geometries found in Shapefile."
+
+            return geometry_list, None
+
+    except Exception as e:
+        return [], f"Unexpected error while processing Shapefile: {str(e)}"
+        
+
+
+# File Parser: KML (.kml)
+def parse_kml(upload_file):
+    try:
+        upload_file.seek(0)
+        try:
+            tree = ET.parse(upload_file)
+        except ET.ParseError:
+            return [], "Invalid KML file. XML could not be parsed."
+
+        # get kml tree structure
+        root = tree.getroot()
+
+        # namespace
+        ns = {"kml": "http://www.opengis.net/kml/2.2"}
+
+        placemarks = root.findall(".//kml:Placemark", ns)
+        if not placemarks:
+            return [], "No Placemark elements found in KML file."
+
+        geometry_list = []
+
+        # getting coordinates from placemark in the kml
+        for placemark in placemarks:
+            coords_elem = placemark.find(".//kml:coordinates", ns)
+            if coords_elem is None or not coords_elem.text:
+                continue
+
+            try:
+                coords_raw = coords_elem.text.strip().split()
+                coords = []
+
+                for c in coords_raw:
+                    lon, lat, *_ = map(float, c.split(","))
+                    coords.append([lon, lat])
+
+                # valid polygon needs at least 3 points
+                if len(coords) < 3:
+                    continue
+
+                # ensure closed polygon
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+
+                ee_geom = ee.Geometry.Polygon([coords])
+                geometry_list.append(ee_geom)
+
+            except Exception:
+                # skip malformed placemark
+                continue
+
+        if not geometry_list:
+            return [], "No valid polygon geometries could be constructed from KML."
+
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing KML file: {str(e)}"
+
+
+# File Parser: TopoJSON (.topojson)
+def parse_topojson(upload_file):
+    try:
+        bytes_data = upload_file.read()
+
+        try:
+            topojson_data = json.loads(bytes_data)
+        except json.JSONDecodeError:
+            return [], "Invalid TopoJSON file. JSON could not be decoded."
+
+        # Check TopoJSON signature
+        if topojson_data.get("type") != "Topology":
+            return [], "File is not a valid TopoJSON (missing or invalid 'Topology' type)."
+
+        # Manually decode TopoJSON arcs to avoid library performance issues
+        # Extract arcs and transform parameters
+        arcs = topojson_data.get("arcs")
+        objects = topojson_data.get("objects")
+        transform = topojson_data.get("transform", {})
+        scale = transform.get("scale", [1, 1])
+        translate = transform.get("translate", [0, 0])
+
+        if not arcs or not isinstance(arcs, list):
+            return [], "TopoJSON file contains no valid arcs."
+
+        if not objects or not isinstance(objects, dict):
+            return [], "TopoJSON file contains no objects."
+
+
+        # Decode arcs from delta-encoded to absolute coordinates
+        decoded_arcs = []
+        for arc in arcs:
+            x, y = 0, 0
+            points = []
+            for dx, dy in arc:
+                x += dx
+                y += dy
+                lon = x * scale[0] + translate[0]
+                lat = y * scale[1] + translate[1]
+                points.append([lon, lat])
+            decoded_arcs.append(points)
+
+        # Extract geometries from objects
+        geometries = []
+        for obj in objects.values():
+            if obj.get("type") == "GeometryCollection":
+                geometries.extend(obj.get("geometries", []))
+            else:
+                geometries.append(obj)
+
+        if not geometries:
+            return [], "TopoJSON file contains no geometries."
+
+        # Convert geometries to Earth Engine geometry objects
+        geometry_list = []
+
+        # Build Earth Engine geometries
+        for geom_data in geometries:
+            geom_type = geom_data.get("type")
+            arcs_refs = geom_data.get("arcs")
+
+            if not arcs_refs:
+                continue
+
+            try:
+                # Polygon
+                if geom_type == "Polygon":
+                    # Polygon: arcs_refs is a list of arc index lists (one per ring)
+                    rings = []
+                    for ring_refs in arcs_refs:
+                        ring = []
+                        for arc_ref in ring_refs:
+                            arc_idx = abs(arc_ref)
+                            arc_points = (
+                                decoded_arcs[arc_idx]
+                                if arc_ref >= 0
+                                else list(reversed(decoded_arcs[arc_idx]))
+                            )
+                            ring.extend(arc_points)
+                        rings.append(ring)
+
+                    geometry_list.append(ee.Geometry.Polygon(rings))
+
+                # MultiPolygon
+                elif geom_type == "MultiPolygon":
+                    polygons = []
+                    for polygon_refs in arcs_refs:
+                        rings = []
+                        for ring_refs in polygon_refs:
+                            ring = []
+                            for arc_ref in ring_refs:
+                                arc_idx = abs(arc_ref)
+                                arc_points = (
+                                    decoded_arcs[arc_idx]
+                                    if arc_ref >= 0
+                                    else list(reversed(decoded_arcs[arc_idx]))
+                                )
+                                ring.extend(arc_points)
+                            rings.append(ring)
+                        polygons.append(rings)
+
+                    geometry_list.append(ee.Geometry.MultiPolygon(polygons))
+
+                # Ignore other geometry types
+
+            except Exception:
+                continue
+
+        if not geometry_list:
+            return [], "No valid Polygon or MultiPolygon geometries could be constructed from TopoJSON."
+
+        return geometry_list, None
+
+    except Exception as e:
+        return [], f"Error processing TopoJSON file: {str(e)}"
+
+
+# File Parser: GeoJSON (.geojson, .json)
+def parse_geojson(upload_file):
+    try:
+        bytes_data = upload_file.read()
+        try:
+            geojson_data = json.loads(bytes_data)
+        except json.JSONDecodeError:
+            return [], "Invalid GeoJSON file. JSON could not be decoded."
+
+        # detect the correct container of features
+        if 'features' in geojson_data and isinstance(geojson_data['features'], list):
+            features = geojson_data['features']
+        elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
+            # Handle GeometryCollection-style structures
+            features = [{'geometry': geo} for geo in geojson_data['geometries']]
+        else:
+            # skip unsupported or invalid GeoJSON
+            return [], "Unsupported GeoJSON structure. Must containe a 'features' or 'geometries' field."
+
+        geometry_list = []
+
+        # build Earth Engine geometries
+        for feature in features:
+            if 'geometry' in feature and 'coordinates' in feature['geometry']:
+                coordinates = feature['geometry']['coordinates']
+                geometry_type = feature['geometry']['type']
+
+                # Create Polygon or MultiPolygon geometry
+                geometry = (
+                    ee.Geometry.Polygon(coordinates)
+                    if geometry_type == 'Polygon'
+                    else ee.Geometry.MultiPolygon(coordinates)
+                )
+
+                geometry_list.append(geometry)
+
+        if not geometry_list:
+            return [], "No valide geometries in the GeoJSON file. Ensure it contains Polygon or MultiPolygon features."
+        return geometry_list, None
+    except Exception as e:
+        return [], f"Error processing GeoJSON file: {str(e)} Please verify the file is valid."
+
+
+# Main Upload Function
 last_uploaded_centroid = None
 def upload_files_proc(upload_files):
     # A global variable to track the latest geojson uploaded
     global last_uploaded_centroid
     # Setting up a variable that takes all polygons/geometries within the same/different geojson
     geometry_aoi_list = []
-
+    # Variable to store all error messages from various parsers
+    error_messages = []
+    
     for upload_file in upload_files:
-        bytes_data = upload_file.read()
-        geojson_data = json.loads(bytes_data)
+        # Get the file name for extension detection
+        file_name = getattr(upload_file, 'name').lower()
+        # reset file pointer if it was read before
+        upload_file.seek(0)
 
-        if 'features' in geojson_data and isinstance(geojson_data['features'], list):
-            # Handle GeoJSON files with a 'features' list
-            features = geojson_data['features']
-        elif 'geometries' in geojson_data and isinstance(geojson_data['geometries'], list):
-            # Handle GeoJSON files with a 'geometries' list
-            features = [{'geometry': geo} for geo in geojson_data['geometries']]
-        else:
-            # handling cases of unexpected file format or missing 'features' or 'geometries'
+        # File Parser: GeoPackage
+        if file_name.endswith(".gpkg"):
+            # store gpkg into a temporary file for Fiona
+            with tempfile.NamedTemporaryFile(suffix=".gpkg", delete=False) as tmp:
+                # write uploaded file content to temp file
+                tmp.write(upload_file.getbuffer())
+                # write data to disk for readability
+                tmp.flush()
+                # parse temporary geopackage
+                gpkg_geoms, error = parse_geopackage(tmp.name)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(gpkg_geoms)
+            if gpkg_geoms:
+                last_uploaded_centroid = gpkg_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
             continue
 
-        for feature in features:
-            if 'geometry' in feature and 'coordinates' in feature['geometry']:
-                coordinates = feature['geometry']['coordinates']
-                geometry = ee.Geometry.Polygon(coordinates) if feature['geometry']['type'] == 'Polygon' else ee.Geometry.MultiPolygon(coordinates)
-                geometry_aoi_list.append(geometry)
+        # File Parser: CSV
+        if file_name.endswith(".csv"):
+            csv_geoms, error = parse_csv(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(csv_geoms)
+            if csv_geoms:
+                last_uploaded_centroid = csv_geoms[0].centroid(maxError=1).getInfo()["coordinates"]
+            continue
 
-                # Update the last uploaded centroid
-                last_uploaded_centroid = geometry.centroid(maxError=1).getInfo()['coordinates']
+        # File Parser: KML
+        if file_name.endswith(".kml"):
+            kml_geoms, error = parse_kml(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(kml_geoms)
+            if kml_geoms:
+                last_uploaded_centroid = kml_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
 
+        # File Parser: ZIP .Shapefile
+        if file_name.endswith(".zip"):
+            shp_geoms, error = parse_zip_shapefile(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(shp_geoms)
+            if shp_geoms:
+                last_uploaded_centroid = shp_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+
+        # File Parser: TopoJSON files
+        if file_name.endswith(".topojson"):
+            topojson_geoms, error = parse_topojson(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}:\n > {error}")
+            geometry_aoi_list.extend(topojson_geoms)
+            if topojson_geoms:
+                last_uploaded_centroid = topojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+
+        # File Parser: GeoJSON files
+        if file_name.endswith(".geojson") or file_name.endswith(".json"):
+            geojson_geoms, error = parse_geojson(upload_file)
+            if error:
+                error_messages.append(f"→ {file_name}: \n > {error}")
+            geometry_aoi_list.extend(geojson_geoms)
+            if geojson_geoms:
+                last_uploaded_centroid = geojson_geoms[0].centroid(maxError=1).getInfo()['coordinates']
+            continue
+    
+    if error_messages:
+        show_error_dialog("\n\n---\n\n".join(error_messages))
+    # assembling aoi geometries
     if geometry_aoi_list:
         geometry_aoi = ee.Geometry.MultiPolygon(geometry_aoi_list)
     else:
-        geometry_aoi = ee.Geometry.Point([27.98, 36.13])
+        geometry_aoi = ee.Geometry.Point([16.25, 36.65])
 
     return geometry_aoi
 
@@ -384,6 +878,9 @@ def date_input_proc(input_date, time_range):
 def main():
     # initiate gee 
     ee_authenticate()
+
+    # Session states
+    st.session_state.setdefault("ee_ready", False)
 
     # sidebar
     with st.sidebar:
@@ -602,7 +1099,7 @@ def main():
                     }
                 </style>
 
-            🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://www.mapbox.com/about/maps" target="_blank" rel="noopener noreferrer">Mapbox</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
+                🇵🇸 NDVI Viewer by <a href="https://github.com/IndigoWizard/NDVI-Viewer" target="_blank" rel="noopener noreferrer">@IndigoWizard</a> | Map Data: <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer">Leaflet</a>, <a href="https://www.openstreetmap.org/about" target="_blank" rel="noopener noreferrer">OSM</a>, <a href="https://www.mapbox.com/about/maps" target="_blank" rel="noopener noreferrer">Mapbox</a>, <a href="https://sentinels.copernicus.eu/sentinel-data-access/sentinel-products/sentinel-2-data-products/collection-1-level-2a" target="_blank" rel="noopener noreferrer">Sentinel-2</a>, <a href="https://earthengine.google.com/" target="_blank" rel="noopener noreferrer">EarthEngine</a>
             """
 
             # add attribution control
@@ -610,104 +1107,136 @@ def main():
 
 
             #### Satellite imagery Processing Section - START
-            ## Defining and clipping image collections for both dates:
-            # initial Image collection
-            initial_collection = satCollection(cloud_pixel_percentage, str_initial_start_date, str_initial_end_date, geometry_aoi)
-            # updated Image collection
-            updated_collection = satCollection(cloud_pixel_percentage, str_updated_start_date, str_updated_end_date, geometry_aoi)
-
-            # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
-            initial_sat_imagery = initial_collection.median()
-            updated_sat_imagery = updated_collection.median()
-
-            ## TCI (True Color Imagery)
-            # Clipping the image to the area of interest "aoi"
-            initial_tci_image = initial_sat_imagery
-            updated_tci_image = updated_sat_imagery
-
-            # TCI image visual parameters
-            tci_params = {
-            'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
-            'min': 0,
-            'max': 1,
-            'gamma': 1
-            }
-
-            ## Other imagery processing operations go here 
-            # NDVI
-            def getNDVI(collection):
-                return collection.normalizedDifference(['B8', 'B4'])
-
-            # clipping to AOI
-            initial_ndvi = getNDVI(initial_sat_imagery)
-            updated_ndvi = getNDVI(updated_sat_imagery)
-
-            # NDVI visual parameters:
-            ndvi_params = {
-            'min': 0,
-            'max': 1,
-            'palette': ndvi_palette
-            }
-
-            # Masking NDVI over the water & show only land
-            def satImageMask(sat_image):
-                masked_image = sat_image.updateMask(sat_image.gte(0))
-                return masked_image
+            ee_errors = []
+            ee_ready = True
             
-            # Mask NDVI images
-            initial_ndvi = satImageMask(initial_ndvi)
-            updated_ndvi = satImageMask(updated_ndvi)
+            ## Defining and clipping image collections for both dates:
+           
+            # initial Image collection
+            initial_collection, initial_collection_error = satCollection(cloud_pixel_percentage, str_initial_start_date, str_initial_end_date, geometry_aoi)
+            
+            if initial_collection_error:
+                ee_errors.append(f"INITIAL DATE - NDVI Collection Error: \n > {initial_collection_error}")
+                ee_ready = False
 
-            # ##### NDVI classification: 7 classes
-            def classify_ndvi(masked_image): # better use a masked image to avoid water bodies obstracting the result as possible
-                ndvi_classified = ee.Image(masked_image) \
-                .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
-                .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
-                .where(masked_image.gte(0.25).And(masked_image.lt(0.35)), 3) \
-                .where(masked_image.gte(0.35).And(masked_image.lt(0.45)), 4) \
-                .where(masked_image.gte(0.45).And(masked_image.lt(0.65)), 5) \
-                .where(masked_image.gte(0.65).And(masked_image.lt(0.75)), 6) \
-                .where(masked_image.gte(0.75), 7) \
+            # updated Image collection
+            updated_collection, updated_collection_error = satCollection(cloud_pixel_percentage, str_updated_start_date, str_updated_end_date, geometry_aoi)
+            
+            if updated_collection_error:
+                ee_errors.append(f"UPDATED DATE - NDVI Collection Error: \n > {updated_collection_error}")
+                ee_ready = False
+
+            # in case where both dates have no corresponding results to the query parameters (avoids double dialog popup crash)
+            # if initial_collection_error and updated_collection_error:
+            #     show_error_dialog(f"No Image Collection Found for any Date: \n > {initial_collection_error} \n {updated_collection_error}")
+            #     ee_ready = False
+
+            if ee_errors:
+                show_error_dialog("\n\n---\n\n".join(ee_errors))
                 
-                return ndvi_classified
+            if ee_ready:
+                # setting a sat_imagery variable that could be used for various processes later on (tci, ndvi... etc)
+                initial_sat_imagery = initial_collection.median()
+                updated_sat_imagery = updated_collection.median()
 
-            # Classify masked NDVI
-            initial_ndvi_classified = classify_ndvi(initial_ndvi)
-            updated_ndvi_classified = classify_ndvi(updated_ndvi)
+                ## TCI (True Color Imagery)
+                # Clipping the image to the area of interest "aoi"
+                initial_tci_image = initial_sat_imagery
+                updated_tci_image = updated_sat_imagery
 
-            # Classified NDVI visual parameters
-            ndvi_classified_params = {
-            'min': 1,
-            'max': 7,
-            'palette': reclassified_ndvi_palette
-            # each color corresponds to an NDVI class.
-            }
+                # TCI image visual parameters
+                tci_params = {
+                'bands': ['B4', 'B3', 'B2'], #using Red, Green & Blue bands for TCI.
+                'min': 0,
+                'max': 1,
+                'gamma': 1
+                }
+
+                ## Other imagery processing operations go here 
+                # NDVI
+                def getNDVI(collection):
+                    return collection.normalizedDifference(['B8', 'B4'])
+
+                # clipping to AOI
+                initial_ndvi = getNDVI(initial_sat_imagery)
+                updated_ndvi = getNDVI(updated_sat_imagery)
+
+                # NDVI visual parameters:
+                ndvi_params = {
+                'min': 0,
+                'max': 1,
+                'palette': ndvi_palette
+                }
+
+                # Masking NDVI over the water & show only land
+                def satImageMask(sat_image):
+                    masked_image = sat_image.updateMask(sat_image.gte(0))
+                    return masked_image
+                
+                # Mask NDVI images
+                initial_ndvi = satImageMask(initial_ndvi)
+                updated_ndvi = satImageMask(updated_ndvi)
+
+                # ##### NDVI classification: 7 classes
+                def classify_ndvi(masked_image): # better use a masked image to avoid water bodies obstracting the result as possible
+                    ndvi_classified = ee.Image(masked_image) \
+                    .where(masked_image.gte(0).And(masked_image.lt(0.15)), 1) \
+                    .where(masked_image.gte(0.15).And(masked_image.lt(0.25)), 2) \
+                    .where(masked_image.gte(0.25).And(masked_image.lt(0.35)), 3) \
+                    .where(masked_image.gte(0.35).And(masked_image.lt(0.45)), 4) \
+                    .where(masked_image.gte(0.45).And(masked_image.lt(0.65)), 5) \
+                    .where(masked_image.gte(0.65).And(masked_image.lt(0.75)), 6) \
+                    .where(masked_image.gte(0.75), 7) \
+                    
+                    return ndvi_classified
+
+                # Classify masked NDVI
+                initial_ndvi_classified = classify_ndvi(initial_ndvi)
+                updated_ndvi_classified = classify_ndvi(updated_ndvi)
+
+                # Classified NDVI visual parameters
+                ndvi_classified_params = {
+                'min': 1,
+                'max': 7,
+                'palette': reclassified_ndvi_palette
+                # each color corresponds to an NDVI class.
+                }
 
             #### Satellite imagery Processing Section - END
 
             #### Layers section - START
-            # Check if the initial and updated dates are the same
-            if initial_date == updated_date:
-                # Only display the layers based on the updated date without dates in their names
-                m.add_ee_layer(updated_tci_image, tci_params, 'Satellite Imagery')
-                m.add_ee_layer(updated_ndvi, ndvi_params, 'Raw NDVI')
-                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+            if ee_ready:
+                st.session_state.ee_ready = True
+                # Check if the initial and updated dates are the same
+                if initial_date == updated_date:
+                    # Only display the layers based on the updated date without dates in their names
+                    m.add_ee_layer(updated_tci_image, tci_params, 'Satellite Imagery')
+                    m.add_ee_layer(updated_ndvi, ndvi_params, 'Raw NDVI')
+                    m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, 'Reclassified NDVI')
+                    
+                    st.toast(f"Results found for: \n\n {initial_date}")
+
+                else:
+                    # Show both dates in the appropriate layers
+                    # Satellite image
+                    m.add_ee_layer(initial_tci_image, tci_params, f'Initial Satellite Imagery: {initial_date}')
+                    m.add_ee_layer(updated_tci_image, tci_params, f'Updated Satellite Imagery: {updated_date}')
+
+                    # NDVI
+                    m.add_ee_layer(initial_ndvi, ndvi_params, f'Initial Raw NDVI: {initial_date}')
+                    m.add_ee_layer(updated_ndvi, ndvi_params, f'Updated Raw NDVI: {updated_date}')
+
+                    # Add layers to the second map (m.m2)
+                    # Classified NDVI
+                    m.add_ee_layer(initial_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {initial_date}')
+                    m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, f'Updated Reclassified NDVI: {updated_date}')
+                    
+                    st.toast(f"Results found for: [{initial_date}]-[{updated_date}]")
+
             else:
-                # Show both dates in the appropriate layers
-                # Satellite image
-                m.add_ee_layer(initial_tci_image, tci_params, f'Initial Satellite Imagery: {initial_date}')
-                m.add_ee_layer(updated_tci_image, tci_params, f'Updated Satellite Imagery: {updated_date}')
-
-                # NDVI
-                m.add_ee_layer(initial_ndvi, ndvi_params, f'Initial Raw NDVI: {initial_date}')
-                m.add_ee_layer(updated_ndvi, ndvi_params, f'Updated Raw NDVI: {updated_date}')
-
-                # Add layers to the second map (m.m2)
-                # Classified NDVI
-                m.add_ee_layer(initial_ndvi_classified, ndvi_classified_params, f'Initial Reclassified NDVI: {initial_date}')
-                m.add_ee_layer(updated_ndvi_classified, ndvi_classified_params, f'Updated Reclassified NDVI: {updated_date}')
-
-
+                st.session_state.ee_ready = False
+                st.toast("No satellite imagery available for the selected parameters.")
+            
             #### Layers section - END
 
             #### Map result display - START
